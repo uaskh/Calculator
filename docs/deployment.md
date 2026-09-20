@@ -30,7 +30,7 @@ sites do not document proxying to another origin. Netlify does, in one line.
 - The repository pushed to GitHub. From the project folder:
 
   ```bash
-  git remote add origin https://github.com/<your-user>/calculator.git
+  git remote add origin https://github.com/uaskh/Calculator.git
   git push -u origin main
   ```
 

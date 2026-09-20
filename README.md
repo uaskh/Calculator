@@ -102,8 +102,8 @@ Docker Engine on Linux). Go, Node.js and npm are not needed on your machine: the
 build everything inside containers.
 
 ```bash
-git clone https://github.com/<your-user>/calculator.git
-cd calculator
+git clone https://github.com/uaskh/Calculator.git
+cd Calculator
 docker compose up --build --wait
 ```
 
