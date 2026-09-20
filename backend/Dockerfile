@@ -5,8 +5,12 @@ ARG GO_VERSION=1.27
 
 FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
+# Resolve modules in their own layer so a source change does not re-download them.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
 # Static binary on a minimal, non-root base image (no shell, no package manager).

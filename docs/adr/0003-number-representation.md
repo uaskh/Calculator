@@ -24,9 +24,13 @@ library with a fixed precision policy (chosen).
 - Inexact operations carry 72 guard places before the 32-place rounding: division uses a
   truncating quotient (`QuoRem`), the square root is the integer square root of the scaled
   coefficient (`math/big`, Newton iteration), and the fractional part of an exponent is
-  computed as `exp(f · ln x)` in fixed point on `math/big` integers at 172 places (100
-  integer digits + 32 places + 40 guard places, with an exact `2^k` split in `exp` so the
-  argument reduction amplifies no error). Truncation
+  computed as `exp(f · ln x)` in binary fixed point on `math/big` integers. Three
+  precision tiers resolve 80, 112 or 172 decimal places (8, 40 or 100 integer digits + 32
+  places + 40 guard places); the tier is chosen from the base's integer digits, because for
+  a fractional exponent the result never has more integer digits than the base. An exact
+  `2^k` split in `exp` and a centred mantissa in `ln` keep the argument reductions from
+  amplifying error, so a 255-step chain of fractional powers (the longest the length limit
+  admits) evaluates in about 2 ms. Truncation
   followed by rounding yields the correctly rounded 32-place value.
 - The library's `PowWithPrecision` is **not** used (spec decision 35): under concurrent
   calls it races on a package-level factorial cache (`go test -race` fails) and it seeds

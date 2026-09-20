@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Match .nvmrc (scaffold.sh writes the installed major.minor here).
+# Match the Node version pinned in .nvmrc.
 ARG NODE_VERSION=26.8
 
 FROM node:${NODE_VERSION}-alpine AS build

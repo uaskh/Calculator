@@ -35,6 +35,7 @@ jobs:
         with:
           go-version-file: backend/go.mod
           cache: true
+          cache-dependency-path: backend/go.sum
       - name: Check formatting
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: Lint
@@ -49,9 +50,9 @@ jobs:
           go test -run='^$' -bench=BenchmarkEvaluate -benchtime=100x ./internal/calc/ | tee ../coverage/backend/bench.txt
           bash ../scripts/coverage-report.sh ../coverage 80 90 5 >> "$GITHUB_STEP_SUMMARY"
       - name: Vulnerability scan
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: Build
-        run: CGO_ENABLED=0 go build -trimpath -o /dev/null ./cmd/api
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /dev/null ./cmd/api
 
   frontend:
     runs-on: ubuntu-latest
@@ -82,6 +83,7 @@ jobs:
         with:
           go-version-file: backend/go.mod
           cache: true
+          cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -116,7 +118,16 @@ jobs:
       - name: Start the stack and wait for health checks
         run: docker compose up --detach --wait
       - name: Smoke test through the web container
-        run: curl --fail --silent --show-error http://localhost:3000/ > /dev/null
+        run: |
+          headers="$(curl --fail --silent --show-error --head http://localhost:3000/)"
+          for h in "X-Content-Type-Options: nosniff" "X-Frame-Options: DENY" "Referrer-Policy: no-referrer" \
+                   "Permissions-Policy: camera=(), microphone=(), geolocation=()" \
+                   "Cross-Origin-Opener-Policy: same-origin" "Content-Security-Policy: default-src 'self'"; do
+            printf '%s\n' "$headers" | grep -qiF "$h" || { echo "missing header on /: $h" >&2; exit 1; }
+          done
+          body="$(curl --fail --silent --show-error -X POST http://localhost:3000/api/v1/evaluate \
+            -H 'Content-Type: application/json' -d '{"expression":"2+2"}')"
+          [ "$body" = '{"expression":"2+2","result":"4"}' ] || { echo "unexpected proxied response: $body" >&2; exit 1; }
       - name: Stop the stack
         if: always()
         run: docker compose down --remove-orphans

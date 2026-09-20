@@ -7,8 +7,11 @@ under `.claude/`.
 
 ## `/spec calculator`
 
-_To be pasted verbatim by the author (the specification session ran before this
-repository's git history began; see plan decision D-7)._
+The specification session ran before this repository's git history began and its prompt
+was not kept. The author is reconstructing it from the session transcript and will add it
+here verbatim (plan decision D-7). Until then, `specs/calculator.md` section 11 records
+every answer given during that session as decisions 1–34, and the plan's decision log
+records the later ones.
 
 ## `/implement`
 

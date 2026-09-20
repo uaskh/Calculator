@@ -482,6 +482,14 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Method Not Allowed
+            status: 405
+            detail: Method GET is not allowed for this resource.
+            instance: /api/v1/evaluate
+            code: METHOD_NOT_ALLOWED
+            requestId: 99ead9ed1b204d0be96c5fddd5ebee1b
     PayloadTooLarge:
       description: The request body exceeds the configured limit (`PAYLOAD_TOO_LARGE`, 4 KiB by default).
       headers:

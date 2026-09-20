@@ -4,5 +4,8 @@ coverage
 playwright-report
 test-results
 e2e
+src/test
+src/**/*.test.ts
+src/**/*.test.tsx
 .env*
 !.env.example

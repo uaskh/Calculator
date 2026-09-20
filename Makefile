@@ -14,6 +14,7 @@ BACKEND_COVERAGE_MIN ?= 80
 DOMAIN_COVERAGE_MIN  ?= 90
 BENCH_COUNT          ?= 100
 BENCH_MAX_MS         ?= 5
+GOVULNCHECK_VERSION  ?= v1.8.0
 
 .PHONY: help setup dev run-backend run-frontend fmt fmt-check lint typecheck \
 	test test-backend test-frontend test-e2e coverage build vuln verify \
@@ -23,7 +24,7 @@ help: ## List available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 setup: ## Install dependencies and the Playwright browser
-	cd $(BACKEND_DIR) && $(GO) mod verify
+	cd $(BACKEND_DIR) && $(GO) mod download && $(GO) mod verify
 	cd $(FRONTEND_DIR) && $(NPM) ci
 	cd $(FRONTEND_DIR) && npx playwright install chromium
 
@@ -71,7 +72,7 @@ coverage: ## Tests with coverage thresholds and the evaluator benchmark; writes 
 	cd $(BACKEND_DIR) && $(GO) tool cover -html=../$(COVERAGE_DIR)/backend/coverage.out \
 		-o ../$(COVERAGE_DIR)/backend/index.html
 	cd $(FRONTEND_DIR) && $(NPM) run --silent test:coverage
-	cd $(BACKEND_DIR) && $(GO) test -run='^$$' -bench=BenchmarkEvaluate -benchtime=$(BENCH_COUNT)x ./internal/calc/ \
+	cd $(BACKEND_DIR) && set -o pipefail && $(GO) test -run='^$$' -bench=BenchmarkEvaluate -benchtime=$(BENCH_COUNT)x ./internal/calc/ \
 		| tee ../$(COVERAGE_DIR)/backend/bench.txt
 	bash scripts/coverage-report.sh $(COVERAGE_DIR) $(BACKEND_COVERAGE_MIN) $(DOMAIN_COVERAGE_MIN) $(BENCH_MAX_MS) > docs/coverage.md
 	@grep -E '^\| \*\*Total|^\| Lines|^\*\*Benchmark' docs/coverage.md
@@ -81,7 +82,7 @@ build: ## Production builds (backend binary in bin/, frontend in frontend/dist)
 	cd $(FRONTEND_DIR) && $(NPM) run build
 
 vuln: ## Known-vulnerability scans (govulncheck, npm audit)
-	cd $(BACKEND_DIR) && $(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	cd $(BACKEND_DIR) && $(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 	cd $(FRONTEND_DIR) && $(NPM) audit --omit=dev --audit-level=high
 
 verify: fmt-check lint typecheck coverage build test-e2e vuln ## Everything CI runs except the container smoke test

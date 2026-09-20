@@ -273,9 +273,71 @@ func TestFractionalPower_MatchesLibrary(t *testing.T) {
 	}
 }
 
-// productionFixedPoint returns the fixed-point context with the configuration numbers uses.
+// TestTierFor proves the fixed-point tier chosen for a base always has a digit budget
+// covering the base's integer digits, works with that budget plus the intermediate and
+// guard places, and is the narrowest such tier, so the cost of a fractional power follows
+// the magnitude of its base rather than the magnitude cap.
+func TestTierFor(t *testing.T) {
+	t.Parallel()
+
+	num := newNumbers()
+	cases := []struct {
+		base       string
+		wantDigits int32
+	}{
+		{"0.5", 8},
+		{"1", 8},
+		{"9.99", 8},
+		{"99999999", 8},
+		{"1" + strings.Repeat("0", 8), 40},
+		{"1" + strings.Repeat("0", 9), 40},
+		{"1" + strings.Repeat("0", 39), 40},
+		{"1" + strings.Repeat("0", 40), MaxIntegerDigits},
+		{"1" + strings.Repeat("0", 41), MaxIntegerDigits},
+		{"1" + strings.Repeat("0", 99), MaxIntegerDigits},
+		{strings.Repeat("9", 100) + "." + strings.Repeat("9", 32), MaxIntegerDigits},
+	}
+	for _, tc := range cases {
+		t.Run(tc.base, func(t *testing.T) {
+			t.Parallel()
+			x := mustDecimal(t, tc.base)
+			tier := num.tierFor(x)
+			if digits := integerDigits(x); int(tier.digits) < digits {
+				t.Errorf("tierFor(%s) serves %d digits, base has %d", tc.base, tier.digits, digits)
+			}
+			if tier.digits != tc.wantDigits {
+				t.Errorf("tierFor(%s).digits = %d, want %d", tc.base, tier.digits, tc.wantDigits)
+			}
+			if want := tier.digits + IntermediatePlaces + fixedGuardPlaces; tier.places != want {
+				t.Errorf("tierFor(%s).places = %d, want %d", tc.base, tier.places, want)
+			}
+		})
+	}
+}
+
+// TestTiers_CoverMagnitudeCap proves the widest tier serves every base the magnitude cap
+// admits and that the tiers are ordered so the narrowest sufficient one is found.
+func TestTiers_CoverMagnitudeCap(t *testing.T) {
+	t.Parallel()
+
+	num := newNumbers()
+	if len(num.tiers) == 0 {
+		t.Fatal("newNumbers built no fixed-point tiers")
+	}
+	for i := 1; i < len(num.tiers); i++ {
+		if num.tiers[i-1].digits >= num.tiers[i].digits {
+			t.Errorf("tiers[%d].digits = %d is not below tiers[%d].digits = %d", i-1, num.tiers[i-1].digits, i, num.tiers[i].digits)
+		}
+	}
+	if widest := num.tiers[len(num.tiers)-1]; widest.digits != MaxIntegerDigits {
+		t.Errorf("widest tier serves %d digits, want %d", widest.digits, MaxIntegerDigits)
+	}
+}
+
+// productionFixedPoint returns the widest fixed-point tier numbers uses, the one serving
+// bases with up to MaxIntegerDigits integer digits.
 func productionFixedPoint() *fixedPoint {
-	return newFixedPoint(MaxIntegerDigits + IntermediatePlaces)
+	return newFixedPoint(MaxIntegerDigits)
 }
 
 func TestFixedPoint_Ln2(t *testing.T) {

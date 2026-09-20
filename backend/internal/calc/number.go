@@ -38,19 +38,43 @@ type numbers struct {
 	one            decimal.Decimal
 	magnitudeLimit decimal.Decimal // 10^MaxIntegerDigits
 	maxExponent    decimal.Decimal
-	fixed          *fixedPoint // exp and ln for fractional powers
+	tiers          []*fixedPoint // exp and ln for fractional powers, by ascending digit budget
 }
 
-// newNumbers builds the arithmetic. The fixed-point context for fractional powers is
-// sized so that the largest reachable result (MaxIntegerDigits integer digits) is still
-// correct in all of its IntermediatePlaces decimals after the guard margin.
+// fixedPointTierDigits are the integer-digit budgets of the fixed-point tiers, ascending;
+// the last one is the magnitude cap, so every base has a tier. A fractional power x^f
+// with x >= 1 is at most x, so its result never has more integer digits than x, and a
+// tier sized for the base is sized for the result. Three tiers keep the common case
+// (bases with a few digits, such as every step of a "^0.5" chain) at 80 working places
+// instead of the 172 the cap needs.
+func fixedPointTierDigits() []int32 {
+	return []int32{8, 40, MaxIntegerDigits}
+}
+
+// newNumbers builds the arithmetic and its fixed-point tiers, each sized so that the
+// largest result it serves is still correct in all of its IntermediatePlaces decimals
+// after the guard margin.
 func newNumbers() *numbers {
-	return &numbers{
+	n := &numbers{
 		one:            decimal.NewFromInt(1),
 		magnitudeLimit: decimal.New(1, MaxIntegerDigits),
 		maxExponent:    decimal.NewFromInt(MaxExponent),
-		fixed:          newFixedPoint(MaxIntegerDigits + IntermediatePlaces),
 	}
+	for _, digits := range fixedPointTierDigits() {
+		n.tiers = append(n.tiers, newFixedPoint(digits))
+	}
+	return n
+}
+
+// tierFor returns the narrowest fixed-point tier whose digit budget covers the integer
+// digits of |x|. The widest tier covers every value under the magnitude cap.
+func (n *numbers) tierFor(x decimal.Decimal) *fixedPoint {
+	digits := integerDigits(x)
+	tier := n.tiers[len(n.tiers)-1]
+	for i := len(n.tiers) - 2; i >= 0 && int(n.tiers[i].digits) >= digits; i-- {
+		tier = n.tiers[i]
+	}
+	return tier
 }
 
 // literal converts a number token to a value: parsed exactly, rejected when
@@ -189,7 +213,7 @@ func (n *numbers) pow(ctx context.Context, base, exponent decimal.Decimal) (deci
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return decimal.Zero, ctxErr
 	}
-	fractionalPower, err := n.intermediate(n.fixed.pow(base, fraction))
+	fractionalPower, err := n.intermediate(n.tierFor(base).pow(base, fraction))
 	if err != nil {
 		return decimal.Zero, err
 	}

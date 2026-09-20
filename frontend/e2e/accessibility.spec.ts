@@ -79,6 +79,39 @@ test.describe('axe (WCAG 2.2 AA)', () => {
 
     await expectNoAxeViolations(page)
   })
+
+  test('reduced motion: keypad transitions are disabled (spec §7 Theme)', async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const calculator = new CalculatorPage(page, testInfo)
+    await calculator.goto()
+
+    const seconds = await calculator
+      .key('add')
+      .evaluate((element) => parseFloat(getComputedStyle(element).transitionDuration))
+    // Either the component rule ("transition: none" → 0s) or the global reset (0.01 ms)
+    // applies; the computed value is reported in seconds.
+    expect(seconds).toBeLessThanOrEqual(0.00001)
+  })
+})
+
+test.describe('keypad layout', () => {
+  test('the equals key spans two columns (spec §7 Keypad)', async ({ page }, testInfo) => {
+    const calculator = new CalculatorPage(page, testInfo)
+    await calculator.goto()
+
+    const equals = await calculator.key('equals').boundingBox()
+    const power = await calculator.key('power').boundingBox()
+    const sqrt = await calculator.key('sqrt, square root').boundingBox()
+    if (equals === null || power === null || sqrt === null) throw new Error('keys not rendered')
+
+    // Two single keys plus the gap between them: from the left edge of sqrt to the right
+    // edge of power equals the width of the equals key.
+    const twoColumns = power.x + power.width - sqrt.x
+    expect(Math.abs(equals.width - twoColumns)).toBeLessThanOrEqual(1)
+    expect(equals.width).toBeGreaterThan(power.width * 1.9)
+  })
 })
 
 test.describe('tap targets', () => {

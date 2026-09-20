@@ -123,19 +123,28 @@ if [[ -f "$bench" ]]; then
   echo "| Case | ns/op | ms/op |"
   echo "|---|---:|---:|"
   slow_file="$(mktemp)"
-  awk -v maxms="$bench_max_ms" -v slowfile="$slow_file" '
+  count_file="$(mktemp)"
+  awk -v maxms="$bench_max_ms" -v slowfile="$slow_file" -v countfile="$count_file" '
     $1 ~ /^BenchmarkEvaluate\// && $(NF) == "ns/op" {
       name = $1; sub(/^BenchmarkEvaluate\//, "", name); sub(/-[0-9]+$/, "", name)
       ns = $(NF - 1); ms = ns / 1000000
       note = ""
       if (ms >= maxms + 0) { note = " (over " maxms " ms)"; slow = slow (slow == "" ? "" : ", ") name }
       printf "| `%s` | %d | %.3f%s |\n", name, ns, ms, note
+      count++
     }
-    END { printf "%s", slow > slowfile }' "$bench"
+    END { printf "%s", slow > slowfile; printf "%d", count + 0 > countfile }' "$bench"
   slow_cases="$(cat "$slow_file")"
-  rm -f "$slow_file"
+  bench_count="$(cat "$count_file")"
+  rm -f "$slow_file" "$count_file"
   echo
-  if [[ -n "$slow_cases" ]]; then
+  # A benchmark that did not run (compile error, renamed function, changed flags) must not
+  # pass the gate silently.
+  if [[ "$bench_count" -eq 0 ]]; then
+    echo "**No benchmark cases were parsed from \`$bench\`; the performance gate did not run.**"
+    echo "no benchmark cases parsed from $bench" >&2
+    status=1
+  elif [[ -n "$slow_cases" ]]; then
     echo "**Benchmark cases over the ${bench_max_ms} ms limit:** ${slow_cases}."
     echo "benchmark cases over the ${bench_max_ms} ms limit: ${slow_cases}" >&2
     status=1

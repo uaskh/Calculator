@@ -5,7 +5,7 @@ consequences. Records are immutable once accepted; a later record supersedes an 
 
 | #                                                  | Title                                                            | Status   |
 | -------------------------------------------------- | ---------------------------------------------------------------- | -------- |
-| [0001](0001-architecture-and-dependency-policy.md) | Architecture and dependency policy                               | Accepted |
+| [0001](0001-architecture-and-dependency-policy.md) | Build on the standard library plus one decimal module            | Accepted |
 | [0002](0002-api-shape-and-error-model.md)          | Expose one evaluation endpoint with RFC 9457 problem details     | Accepted |
 | [0003](0003-number-representation.md)              | Compute with exact decimals and bounded precision                | Accepted |
 | [0004](0004-lenient-normalization.md)              | Normalize incomplete expressions before parsing                  | Accepted |

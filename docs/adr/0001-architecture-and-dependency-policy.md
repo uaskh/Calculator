@@ -1,4 +1,4 @@
-# 0001. Architecture and dependency policy
+# 0001. Build on the standard library plus one decimal module
 
 - Status: Accepted
 - Date: 2026-09-18

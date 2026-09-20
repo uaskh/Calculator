@@ -2,7 +2,7 @@
 
 - Spec: `specs/calculator.md` (read on 2026-09-18)
 - Mode: greenfield
-- Status: approved
+- Status: done (see progress log)
 
 ## 1. Requirements matrix
 
@@ -133,7 +133,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | D-5 | Body limit and handler timeout | Environment variables `HTTP_MAX_BODY_BYTES=4096`, `HTTP_REQUEST_TIMEOUT=5s`, documented in the README config table (user, 2026-09-18) | Config tests cover both; README lists them with the other limits |
 | D-6 | Docker | User installs Docker before Phase 6; compose smoke test runs locally then (user, 2026-09-18) | Phase 6 blocks on `docker compose` availability |
 | D-7 | `docs/prompts.md` | The `/spec` prompt is pasted by the user in Phase 7; `/implement` invocation recorded now (user, 2026-09-18) | Phase 7 asks for the text |
-| D-9 | Fractional exponent implementation | In-package fixed-point `exp(f·ln x)` on `math/big` (172 places: 100 integer digits + 32 places + 40 guard, exact `2^k` split; review finding R-1 widened it from 88) replaces `PowWithPrecision`, which has a verified data race and a `float64` seed; spec §5 and decision 35 amended (user, 2026-09-18) | A-14's fractional step changes; number-representation ADR documents the race |
+| D-9 | Fractional exponent implementation | In-package fixed-point `exp(f·ln x)` on `math/big` (binary scale; three tiers resolving 80/112/172 decimal places chosen from the base's integer digits, each with 40 guard places and an exact `2^k` split; review findings widened the top tier from 88 places and added the tiers for NFR-4) replaces `PowWithPrecision`, which has a verified data race and a `float64` seed; spec §5 and decision 35 amended (user, 2026-09-18) | A-14's fractional step changes; number-representation ADR documents the race |
 | D-10 | `sqrt` key accessible name | `"sqrt, square root"` so the visible label is contained in the accessible name (WCAG 2.5.3); spec §7 decision 36 (user, 2026-09-19) | Keypad, unit test, Playwright helper and spec updated |
 | D-8 | Branch | `master` renamed to `main`; CI triggers on `main` and pull requests (user, 2026-09-18) | Matches the template workflow |
 
@@ -154,7 +154,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | A-13 | The evaluator takes `context.Context` and checks `ctx.Err()` per node and per multiplication step; the handler maps `context.DeadlineExceeded` to 503 `TIMEOUT` | Makes the 5 s timeout real without leaking goroutines |
 | A-14 | Fractional exponent `n`: `x^floor(n)` through the capped square-and-multiply, `x^(n−floor(n))` through `PowWithPrecision(…, 72)`, product rounded to 32 places. Negative exponents (any) first take the reciprocal via the division path | Keeps `9^999.5` within NFR-4; "the library's power with precision" still does the fractional part |
 | A-15 | Division: `QuoRem` truncated at 72 places then rounded to 32; `sqrt`: integer square root of the scaled coefficient (`big.Int.Sqrt`, Newton) truncated at 72 places then rounded to 32 | Truncation plus rounding yields the correctly rounded 32-place value |
-| A-16 | Benchmark corpus: 1,024-digit literal, `0.`+1,022 digits, `1.0001^1000`, `(1.0001^1000)^1000`, 32-deep `2^0.5` chain, 32-deep `sqrt` chain, 32-deep parentheses, `2^332`, `99^50`, `9^999.5` | "Named worst-case corpus" leaves the names to us |
+| A-16 | Benchmark corpus: 1,024-digit literal, `0.`+1,022 digits, `1.0001^1000`, `(1.0001^1000)^1000`, `(1.1^1000)^1000` (pre-check reject), 32-deep `2^0.5` chain, 32-deep `sqrt` chain, 32-deep parentheses, `2^332`, `99^50`, `9^999.5`, `(10^99)^0.999`, and the 255-step fractional chains `0.5^0.5…`, `2^0.5…`, `0.7^0.7…` (the longest chains the length limit admits) | "Named worst-case corpus" leaves the names to us |
 | A-17 | CI keeps the template's four jobs (they mirror `make verify`), adds the `docs/brief.md` tracked-file check and Go module caching; action versions checkout v7, setup-go v7, setup-node v7, golangci-lint-action v9 (`v2.13`), upload-artifact v7 | Delivery rule: "mirrors `make verify`" |
 | A-18 | `LOG_FORMAT=text` set by the Makefile `run-backend` target that `scripts/dev.sh` calls | Equivalent to "dev.sh sets text" |
 | A-19 | Frontend keeps `VITE_API_TIMEOUT_MS` (default 10000); `VITE_API_BASE_URL` defaults to `''` and the client appends `/api/v1` | 10 s is the spec value; override is additive |
@@ -312,10 +312,10 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - [x] T-19 Containers: `docker compose up --build --wait`, smoke through :3000 (D-6); commit `test(e2e): …`
 
 ### Phase 7: Verify, review, document
-- [ ] Full verification (`/verify full`)
-- [ ] Review and fixes (`/review spec:calculator --fix`)
-- [ ] ADRs: dependency policy, API shape and error model, number representation, lenient normalization, percent semantics, live-preview strategy, container topology
-- [ ] README (`/readme`), `docs/prompts.md` (D-7), `docs/coverage.md` with benchmarks
+- [x] Full verification (`/verify full`)
+- [x] Review and fixes (`/review spec:calculator --fix`)
+- [x] ADRs: dependency policy, API shape and error model, number representation, lenient normalization, percent semantics, live-preview strategy, container topology
+- [x] README (`/readme`), `docs/prompts.md` (D-7), `docs/coverage.md` with benchmarks
 
 ## 9. Dependencies to add
 
@@ -341,4 +341,6 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - 2026-09-18: Phase 2 complete, commit `0a2322c` (`docs(plan): add calculator implementation plan`).
 - 2026-09-18: Phase 3 complete, commit `7c8ec42` (`chore: scaffold backend and frontend`).
 - 2026-09-18: Phase 4 complete, commit `6cc04bd` (`feat(api): add expression evaluation endpoint and calculator domain`); decision D-9 recorded.
+- 2026-09-18: Phase 6 complete, commit `42e9cf4` (`test(e2e): add API black-box journeys and Playwright suites`); container smoke test run locally.
+- 2026-09-19: Phase 7 review fixes, commit `b74872e` (`fix(calc): keep fractional powers exact near the cap and gate the final rounding`); follow-up fixes, ADRs 0002–0007 and README in the next commit. Open item: the `/spec` prompt in `docs/prompts.md` (D-7).
 - 2026-09-18: Phase 5 complete, commit `831249c` (`feat(web): add calculator feature with live preview, keypad and history`).

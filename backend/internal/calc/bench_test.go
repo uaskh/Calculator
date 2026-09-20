@@ -2,9 +2,11 @@ package calc
 
 import (
 	"errors"
+	"math"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // canonicalValue is the result pattern published in the API contract, kept byte-for-byte.
@@ -38,6 +40,52 @@ func benchmarkCorpus() []benchmarkCase {
 		{name: "pow_99^50", input: "99^50", value: bigPow(99, 50)},
 		{name: "pow_9^999.5", input: "9^999.5", code: CodeResultTooLarge},
 		{name: "pow_large_fractional_(10^99)^0.999", input: "(10^99)^0.999", value: "796159350417318744185341970687172307579007314201602764575008496413321708599304314072090503021624071.6058243083988372"},
+		{name: "pow_fractional_chain_0.5^0.5_x255", input: fractionalPowerChain("0.5"), value: "0.641185744504986"},
+		{name: "pow_fractional_chain_2^0.5_x255", input: fractionalPowerChain("2"), value: "1.5596104694623693"},
+		{name: "pow_fractional_chain_0.7^0.7_x255", input: "0.7" + strings.Repeat("^0.7", fractionalPowerChainLength), value: "0.7620134308107167"},
+	}
+}
+
+// fractionalPowerChainLength is how many "^0.5" steps follow the base in the longest
+// fractional-power chain the length limit admits: "0.5" + 255 × "^0.5" is 1,023 code
+// points. "^" is right-associative, so every one of the 255 steps is a fractional power
+// whose base is 0.5 (or the leading base for the outermost step). The 0.7 variant has
+// the costliest mantissa for the logarithm (0.5 is a power of two, whose mantissa is
+// exactly 1) and the expected values come from Python's decimal module at 120 digits,
+// rounding every step to 32 places half up exactly as the evaluator does.
+const fractionalPowerChainLength = 255
+
+// fractionalPowerChain returns base followed by fractionalPowerChainLength "^0.5" steps.
+func fractionalPowerChain(base string) string {
+	return base + strings.Repeat("^0.5", fractionalPowerChainLength)
+}
+
+// fractionalPowerChainBudget is the NFR-4 bound for one evaluation of a corpus case.
+const fractionalPowerChainBudget = 5 * time.Millisecond
+
+// TestFractionalPowerChainBudget guards NFR-4 for the true worst case of "^" chains: the
+// best of five evaluations of the 255-step fractional-power chain must finish within the
+// budget. Timing is meaningless under the race detector and slow in the -short gate, so
+// both skip it; the benchmark quotes the exact numbers.
+func TestFractionalPowerChainBudget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing guard: skipped in -short mode")
+	}
+	if raceEnabled {
+		t.Skip("timing guard: skipped under the race detector")
+	}
+	calc := New()
+	input := fractionalPowerChain("0.5")
+	best := time.Duration(math.MaxInt64)
+	for range 5 {
+		start := time.Now()
+		if _, err := calc.Evaluate(t.Context(), input); err != nil {
+			t.Fatalf("Evaluate(0.5^0.5 chain) returned error %v", err)
+		}
+		best = min(best, time.Since(start))
+	}
+	if best >= fractionalPowerChainBudget {
+		t.Errorf("Evaluate(0.5^0.5 x%d) best of 5 = %v, want under %v", fractionalPowerChainLength, best, fractionalPowerChainBudget)
 	}
 }
 
