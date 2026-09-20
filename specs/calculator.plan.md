@@ -163,6 +163,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | A-24 | `docs/coverage.md` gets a "Benchmarks" section with `BenchmarkEvaluate` numbers from `make coverage` (local) and the CI summary | NFR-4 gives no format |
 | A-25 | Playwright covers 320 px with `page.setViewportSize` inside the desktop project; projects keep the template names with the spec's devices | No third project required |
 | A-26 | Access log `duration_ms` is an integer millisecond count; `error` holds the problem code and detail for 5xx and the panic value for panics | NFR-6 names the keys, not the formats |
+| A-28 | ESLint is pinned to major 9 (`eslint@^9`, `@eslint/js@^9`) because `eslint-plugin-jsx-a11y` 6.10 declares ESLint 3–9 support only; every other plugin supports 9 | Cleanest resolution of a peer conflict the template created; dev tooling only |
 | A-27 | Ports: API 8080, Vite 5173, containers web 3000; Playwright uses 18080/14173 | Clarification guide defaults |
 
 ## 3. Architecture
@@ -276,10 +277,10 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 ## 8. Tasks
 
 ### Phase 3: Scaffold
-- [ ] T-1 Repo files (`scaffold.sh repo`), CI action versions, `compose.yaml` rename (`web`/`backend`), `.gitignore` `docs/brief.md`, ADR 0001 wording for the decimal module
-- [ ] T-2 Backend skeleton (`scaffold.sh backend`), `go get github.com/shopspring/decimal@v1.4.0`, depguard allow-list, config defaults (D-5, 10 s shutdown), readiness body `ok`
-- [ ] T-3 Frontend skeleton (Vite + overlay + dev deps incl. `@axe-core/playwright`), tsconfig/ESLint merge, `VITE_API_BASE_URL` semantics
-- [ ] T-4 `make fmt lint typecheck test build` green; `make dev` smoke via Vite proxy; commit `chore: scaffold backend and frontend`
+- [x] T-1 Repo files (`scaffold.sh repo`), CI action versions, `compose.yaml` rename (`web`/`backend`), `.gitignore` `docs/brief.md`, ADR 0001 wording for the decimal module
+- [x] T-2 Backend skeleton (`scaffold.sh backend`), `go get github.com/shopspring/decimal@v1.4.0`, depguard allow-list, config defaults (D-5, 10 s shutdown), readiness body `ok`
+- [x] T-3 Frontend skeleton (Vite + overlay + dev deps incl. `@axe-core/playwright`), tsconfig/ESLint merge (`VITE_API_BASE_URL` semantics move to T-11)
+- [x] T-4 `make fmt lint typecheck test build` green; `make dev` smoke via Vite proxy; commit `chore: scaffold backend and frontend`
 
 ### Phase 4: Backend
 - [ ] T-5 (FR-1.4, FR-6, FR-7) Tokens, lexer, normalizer, validation errors and messages, depth check
@@ -329,3 +330,4 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 ## 11. Progress log
 
 - 2026-09-18: Phase 0–1 complete (toolchain, guardrail edits, clarifications D-1..D-8).
+- 2026-09-18: Phase 2 complete, commit `0a2322c` (`docs(plan): add calculator implementation plan`).

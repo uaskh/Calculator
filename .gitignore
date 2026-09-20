@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+/bin/
+frontend/dist/
+
+# Test output (coverage summary lives in docs/coverage.md)
+/coverage/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+*.out
+
+# Local review reports
+/.reviews/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# The assessment brief is kept locally only (spec calculator, decision 28)
+docs/brief.md

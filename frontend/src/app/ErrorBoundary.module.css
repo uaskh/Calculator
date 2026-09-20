@@ -1,0 +1,25 @@
+.fallback {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.fallback p {
+  margin: 0;
+}
+
+.retry {
+  justify-self: start;
+  min-height: var(--tap-target);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-contrast);
+  background: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
