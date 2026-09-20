@@ -10,7 +10,7 @@ import "strings"
 // the original spacing.
 func lex(input []rune, ops operatorTable, fns functionTable) ([]token, error) {
 	tokens := make([]token, 0, len(input))
-	danglingDot := -1 // start of a number ending in "." that must remain the last token
+	dangling := token{pos: -1} // a number ending in "." that must remain the last token
 	for i := 0; i < len(input); {
 		tok := scanToken(input, i, ops)
 		i = tok.end
@@ -18,18 +18,18 @@ func lex(input []rune, ops operatorTable, fns functionTable) ([]token, error) {
 			tokens = append(tokens, tok)
 			continue
 		}
-		if danglingDot >= 0 {
-			return nil, invalidNumber(danglingDot)
+		if dangling.pos >= 0 {
+			return nil, invalidNumber(dangling.text, dangling.pos)
 		}
 		switch tok.kind {
 		case tokenInvalid:
 			return nil, invalidCharacter(input[tok.pos], tok.pos)
 		case tokenNumber:
 			if strings.Count(tok.text, ".") > 1 {
-				return nil, invalidNumber(tok.pos)
+				return nil, invalidNumber(tok.text, tok.pos)
 			}
 			if strings.HasSuffix(tok.text, ".") {
-				danglingDot = tok.pos
+				dangling = tok
 			}
 		case tokenIdentifier:
 			if _, ok := fns[tok.text]; !ok {

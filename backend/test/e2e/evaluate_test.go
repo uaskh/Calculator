@@ -137,7 +137,7 @@ func TestEvaluate_Examples(t *testing.T) {
 			{"position indexes the untrimmed input", "  2 3", "UNEXPECTED_TOKEN", 4, true, "unexpected '3' at character 5"},
 			{"end of input", "sqrt", "UNEXPECTED_TOKEN", 4, true, "unexpected end of input"},
 			{"extra close parenthesis", "2+3)", "UNBALANCED_PARENTHESIS", 3, true, "unbalanced ')' at character 4"},
-			{"two dots", "1.2.3", "INVALID_NUMBER", 0, true, "invalid number at character 1"},
+			{"two dots", "1.2.3", "INVALID_NUMBER", 0, true, "invalid number '1.2.3' at character 1"},
 			{"dollar", "2$3", "INVALID_CHARACTER", 1, true, "invalid character '$' at character 2"},
 			{"unknown function", "foo(1)", "UNKNOWN_FUNCTION", 0, true, "unknown function 'foo' at character 1"},
 			{"1,025 characters", strings.Repeat("1", 1025), "TOO_LONG", 0, false, "expression exceeds 1,024 characters"},

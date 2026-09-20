@@ -248,7 +248,7 @@ func TestEvaluate_ValidationErrors(t *testing.T) {
 		{"too long", &calc.ValidationError{Code: calc.CodeTooLong, Message: "expression exceeds 1,024 characters"}},
 		{"too deep", &calc.ValidationError{Code: calc.CodeTooDeep, Message: "expression is nested deeper than 32 levels"}},
 		{"invalid character", &calc.ValidationError{Code: calc.CodeInvalidCharacter, Position: 1, HasPosition: true, Message: "invalid character '$' at character 2"}},
-		{"invalid number", &calc.ValidationError{Code: calc.CodeInvalidNumber, Position: 0, HasPosition: true, Message: "invalid number at character 1"}},
+		{"invalid number", &calc.ValidationError{Code: calc.CodeInvalidNumber, Position: 0, HasPosition: true, Message: "invalid number '1.2.3' at character 1"}},
 		{"unexpected token", &calc.ValidationError{Code: calc.CodeUnexpectedToken, Position: 3, HasPosition: true, Message: "unexpected ')' at character 4"}},
 		{"unbalanced parenthesis", &calc.ValidationError{Code: calc.CodeUnbalancedParenthesis, Position: 3, HasPosition: true, Message: "unbalanced ')' at character 4"}},
 		{"unknown function", &calc.ValidationError{Code: calc.CodeUnknownFunction, Position: 0, HasPosition: true, Message: "unknown function 'foo' at character 1"}},

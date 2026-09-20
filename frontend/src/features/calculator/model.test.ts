@@ -182,7 +182,7 @@ describe('messageFor', () => {
     { code: 'TOO_LONG', message: 'expression exceeds 1,024 characters' },
     { code: 'TOO_DEEP', message: 'expression is nested deeper than 32 levels' },
     { code: 'INVALID_CHARACTER', message: "invalid character '$' at character 2", position: 1 },
-    { code: 'INVALID_NUMBER', message: 'invalid number at character 1', position: 0 },
+    { code: 'INVALID_NUMBER', message: "invalid number '1.2.3' at character 1", position: 0 },
     { code: 'UNEXPECTED_TOKEN', message: "unexpected ')' at character 4", position: 3 },
     { code: 'UNBALANCED_PARENTHESIS', message: "unbalanced ')' at character 4", position: 3 },
     { code: 'UNKNOWN_FUNCTION', message: "unknown function 'foo' at character 1", position: 0 },

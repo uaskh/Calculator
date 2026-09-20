@@ -26,8 +26,10 @@ func invalidCharacter(r rune, pos int) *ValidationError {
 	return positioned(CodeInvalidCharacter, pos, fmt.Sprintf("invalid character %s at character %d", quoteRune(r), pos+1))
 }
 
-func invalidNumber(pos int) *ValidationError {
-	return positioned(CodeInvalidNumber, pos, fmt.Sprintf("invalid number at character %d", pos+1))
+// invalidNumber quotes the whole number token so the reader sees what is wrong even
+// though the position points at the token's first character (spec decision 39).
+func invalidNumber(text string, pos int) *ValidationError {
+	return positioned(CodeInvalidNumber, pos, fmt.Sprintf("invalid number '%s' at character %d", text, pos+1))
 }
 
 func unknownFunction(name string, pos int) *ValidationError {
