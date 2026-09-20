@@ -30,7 +30,9 @@ command in containers.
   are closed, and the evaluated expression is echoed ("Evaluated as 2*(3+4)").
 - Every error is machine-readable: RFC 9457 problem details with a stable `code` and, for
   validation errors, a 0-based character position.
-- Light and dark themes, WCAG 2.2 AA (checked with axe), responsive from 320 px.
+- Styled as a physical calculator (dark LCD display, keys with depth grouped by colour,
+  paper-tape history) using system fonts and design tokens with light and dark values;
+  WCAG 2.2 AA (checked with axe), responsive from 320 px.
 
 ## Architecture
 

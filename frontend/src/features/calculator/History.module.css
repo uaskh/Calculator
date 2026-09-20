@@ -3,16 +3,28 @@
 }
 
 .heading {
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-lg);
-  line-height: 1.3;
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+  text-transform: uppercase;
 }
 
+/*
+ * A strip of "paper tape": the list draws the outline (a control border, since every row
+ * is a button) and the rows share thin dividers. Corners are rounded on the rows rather
+ * than clipped with overflow, so focus rings stay visible.
+ */
 .list {
   display: grid;
-  gap: var(--space-2);
   margin: 0;
   padding: 0;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: var(--color-tape-bg);
+  box-shadow: var(--shadow-sm);
   list-style: none;
 }
 
@@ -20,28 +32,39 @@
   width: 100%;
   min-height: var(--tap-target);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-control-border);
-  border-radius: var(--radius-md);
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
   color: var(--color-text);
-  background: var(--color-surface);
+  background: transparent;
   font-family: var(--font-mono);
   text-align: left;
   overflow-wrap: anywhere;
   cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.list > li:first-child > .entry {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.list > li:last-child > .entry {
+  border-bottom: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .entry:hover {
-  background: var(--color-border);
+  background: var(--color-device-bg);
+  box-shadow: inset 4px 0 0 var(--color-accent);
 }
 
-/* Inside the desktop panel (decision 37) entries sit on the panel surface. */
 @media (min-width: 48rem) {
-  .heading {
-    font-size: clamp(var(--text-lg), 1.6vw, 1.5rem);
-  }
-
   .entry {
-    background: var(--color-bg);
     font-size: clamp(var(--text-md), 1.3vw, var(--text-lg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry {
+    transition: none;
   }
 }

@@ -2,11 +2,18 @@
  * Design tokens. Components use these variables, never raw values.
  * The light palette below is the default; the dark palette applies on screen only, so a
  * printed page always uses the light values without repeating them.
+ *
+ * The calculator is styled as a physical device: a page gradient, a "device body" panel,
+ * a dark LCD display in both schemes, and four key groups (digits, operators, actions and
+ * the accent-coloured equals key). Every text colour reaches 4.5:1 on its background and
+ * every key edge (border) 3:1 on the device body; src/lib/contrast.test.ts checks this.
  */
 :root {
   color-scheme: light dark;
 
   --color-bg: #ffffff;
+  --color-bg-gradient-start: #e6ebf4;
+  --color-bg-gradient-end: #fafbfd;
   --color-surface: #f5f6f8;
   --color-text: #16181d;
   --color-text-muted: #545b68;
@@ -15,9 +22,38 @@
   --color-control-border: #7c8596;
   --color-accent: #2554c7;
   --color-accent-contrast: #ffffff;
+  --color-accent-edge: #173a8f;
   --color-danger: #b42318;
   --color-success: #1a7f37;
   --color-focus: #2554c7;
+
+  /* Device body: the panel that holds the display, keypad and history. */
+  --color-device-bg: #e4e8ef;
+  --color-device-border: #c9cfd9;
+
+  /* LCD display: dark in both schemes; the focus and danger cues are tuned for it. */
+  --color-display-bg: #1c2333;
+  --color-display-text: #f2f5ff;
+  --color-display-text-muted: #aab6d0;
+  --color-display-border: #7a88a8;
+  --color-display-danger: #ff8a80;
+  --color-display-focus: #8fb0ff;
+
+  /* Key faces: digits and the decimal point (neutral), operators (blue), C and ⌫ (warm). */
+  --color-key-bg: #f3f5f8;
+  --color-key-text: #16181d;
+  --color-key-edge: #757e8f;
+  --color-key-operator-bg: #dbe5fb;
+  --color-key-operator-text: #1a3a8a;
+  --color-key-operator-edge: #5b73b0;
+  --color-key-action-bg: #f5e3d0;
+  --color-key-action-text: #7a3b0c;
+  --color-key-action-edge: #a8744a;
+  --color-key-highlight: rgb(255 255 255 / 60%);
+  --color-key-hover-highlight: rgb(255 255 255 / 85%);
+
+  /* History "paper tape" rows. */
+  --color-tape-bg: #fffdf8;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -29,6 +65,7 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 20px;
 
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -38,6 +75,9 @@
   --text-xl: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 8%);
+  --shadow-md: 0 16px 40px rgb(20 30 60 / 14%), 0 2px 6px rgb(20 30 60 / 8%);
+  --shadow-key: 0 4px 8px rgb(20 30 60 / 12%);
+  --shadow-display: inset 0 0 0 1px rgb(0 0 0 / 30%), inset 0 3px 10px rgb(0 0 0 / 45%);
   --focus-outline: 3px solid var(--color-focus);
   --focus-offset: 2px;
   --tap-target: 44px;
@@ -48,6 +88,8 @@
 @media screen and (prefers-color-scheme: dark) {
   :root {
     --color-bg: #0f1115;
+    --color-bg-gradient-start: #161a24;
+    --color-bg-gradient-end: #0b0d12;
     --color-surface: #181b22;
     --color-text: #e8eaef;
     --color-text-muted: #a3aab8;
@@ -55,10 +97,39 @@
     --color-control-border: #6b7382;
     --color-accent: #8fb0ff;
     --color-accent-contrast: #0f1115;
+    --color-accent-edge: #6d8fd8;
     --color-danger: #ff8a80;
     --color-success: #5fd08a;
     --color-focus: #8fb0ff;
+
+    --color-device-bg: #1c2028;
+    --color-device-border: #2f3541;
+
+    --color-display-bg: #0a0e19;
+    --color-display-text: #e9eef7;
+    --color-display-text-muted: #9fabc3;
+    --color-display-border: #6e7b97;
+    --color-display-danger: #ff8a80;
+    --color-display-focus: #8fb0ff;
+
+    --color-key-bg: #2a2f3a;
+    --color-key-text: #e8eaef;
+    --color-key-edge: #646c7c;
+    --color-key-operator-bg: #2b3a5c;
+    --color-key-operator-text: #d7e3ff;
+    --color-key-operator-edge: #6a84c2;
+    --color-key-action-bg: #4a3626;
+    --color-key-action-text: #ffd9b8;
+    --color-key-action-edge: #a47b58;
+    --color-key-highlight: rgb(255 255 255 / 7%);
+    --color-key-hover-highlight: rgb(255 255 255 / 14%);
+
+    --color-tape-bg: #20242d;
+
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-md: 0 16px 40px rgb(0 0 0 / 55%), 0 2px 6px rgb(0 0 0 / 40%);
+    --shadow-key: 0 4px 8px rgb(0 0 0 / 45%);
+    --shadow-display: inset 0 0 0 1px rgb(255 255 255 / 9%), inset 0 3px 10px rgb(0 0 0 / 70%);
   }
 }
 

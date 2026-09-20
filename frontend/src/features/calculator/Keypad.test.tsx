@@ -64,6 +64,28 @@ describe('<Keypad />', () => {
     expect(screen.getByRole('button', { name: 'equals' })).toHaveTextContent('=')
   })
 
+  it('tags every key with its styling group (digits, operators, actions, equals)', () => {
+    renderKeypad()
+
+    const group = (name: string) => screen.getByRole('button', { name }).getAttribute('data-group')
+    for (const name of ['0', '7', 'decimal point']) expect(group(name)).toBe('digit')
+    for (const name of [
+      'open parenthesis',
+      'close parenthesis',
+      'divide',
+      'multiply',
+      'subtract',
+      'add',
+      'percent',
+      'sqrt, square root',
+      'power',
+    ]) {
+      expect(group(name)).toBe('operator')
+    }
+    for (const name of ['clear', 'backspace']) expect(group(name)).toBe('action')
+    expect(group('equals')).toBe('equals')
+  })
+
   it('makes only = a submit button', () => {
     renderKeypad()
 

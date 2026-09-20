@@ -59,15 +59,42 @@ function themes(): { name: string; colours: Record<string, string> }[] {
   ]
 }
 
-const TEXT_PAIRS: [foreground: string, background: string][] = [
+type Pair = [foreground: string, background: string]
+
+const TEXT_PAIRS: Pair[] = [
   ['color-text', 'color-bg'],
   ['color-text', 'color-surface'],
+  ['color-text', 'color-bg-gradient-start'],
+  ['color-text', 'color-bg-gradient-end'],
+  ['color-text', 'color-device-bg'],
+  ['color-text', 'color-tape-bg'],
   ['color-text-muted', 'color-bg'],
   ['color-text-muted', 'color-surface'],
+  ['color-text-muted', 'color-bg-gradient-start'],
+  ['color-text-muted', 'color-bg-gradient-end'],
+  ['color-text-muted', 'color-device-bg'],
   ['color-danger', 'color-bg'],
   ['color-danger', 'color-surface'],
+  ['color-danger', 'color-device-bg'],
   ['color-success', 'color-bg'],
   ['color-accent-contrast', 'color-accent'],
+  ['color-display-text', 'color-display-bg'],
+  ['color-display-text-muted', 'color-display-bg'],
+  ['color-key-text', 'color-key-bg'],
+  ['color-key-operator-text', 'color-key-operator-bg'],
+  ['color-key-action-text', 'color-key-action-bg'],
+]
+
+/** Borders, edges and state cues: non-text contrast (WCAG 1.4.11) against their background. */
+const CONTROL_PAIRS: Pair[] = [
+  ['color-control-border', 'color-bg'],
+  ['color-key-edge', 'color-device-bg'],
+  ['color-key-operator-edge', 'color-device-bg'],
+  ['color-key-action-edge', 'color-device-bg'],
+  ['color-accent-edge', 'color-device-bg'],
+  ['color-display-border', 'color-display-bg'],
+  ['color-display-danger', 'color-display-bg'],
+  ['color-display-focus', 'color-display-bg'],
 ]
 
 describe('design tokens (UI-6)', () => {
@@ -80,7 +107,7 @@ describe('design tokens (UI-6)', () => {
 
   it('define every colour the pairs need in both themes', () => {
     for (const theme of themes()) {
-      for (const pair of TEXT_PAIRS) {
+      for (const pair of [...TEXT_PAIRS, ...CONTROL_PAIRS]) {
         for (const name of pair) {
           expect(theme.colours[name], `${theme.name} --${name}`).toMatch(/^#/)
         }
@@ -96,11 +123,18 @@ describe('design tokens (UI-6)', () => {
       expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(4.5)
     })
 
-    it('--color-control-border reaches 3:1 on --color-bg (WCAG 1.4.11)', () => {
-      const border = colours['color-control-border']
-      const bg = colours['color-bg']
-      if (border === undefined || bg === undefined) throw new Error('token missing')
-      expect(contrastRatio(border, bg)).toBeGreaterThanOrEqual(3)
+    it.each(CONTROL_PAIRS)('--%s on --%s reaches 3:1 (WCAG 1.4.11)', (control, background) => {
+      const fg = colours[control]
+      const bg = colours[background]
+      if (fg === undefined || bg === undefined) throw new Error('token missing')
+      expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(3)
+    })
+
+    it('--color-display-text on --color-display-bg reaches 7:1 (LCD legibility)', () => {
+      const fg = colours['color-display-text']
+      const bg = colours['color-display-bg']
+      if (fg === undefined || bg === undefined) throw new Error('token missing')
+      expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(7)
     })
   })
 })

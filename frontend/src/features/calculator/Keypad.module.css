@@ -2,25 +2,67 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
+  /* Room for the 3px key edge under the last row. */
+  padding-bottom: 3px;
 }
 
+/*
+ * Physical keys: a top-lit face, a solid 3px edge plus a soft shadow for depth, pressed
+ * down 2px on :active. Each `data-group` swaps the three colour variables the base rule
+ * reads (tokens.css defines the pairs); the focus ring stays the global :focus-visible one.
+ */
 .key {
+  --key-bg: var(--color-key-bg);
+  --key-text: var(--color-key-text);
+  --key-edge: var(--color-key-edge);
+  --key-highlight: var(--color-key-highlight);
+  --key-hover-highlight: var(--color-key-hover-highlight);
+
   min-width: var(--tap-target);
   min-height: var(--tap-target);
   padding: var(--space-2);
-  border: 1px solid var(--color-control-border);
+  border: 1px solid var(--key-edge);
   border-radius: var(--radius-md);
-  color: var(--color-text);
-  background: var(--color-surface);
+  color: var(--key-text);
+  background-color: var(--key-bg);
+  background-image: linear-gradient(180deg, var(--key-highlight), transparent 60%);
+  box-shadow:
+    0 3px 0 var(--key-edge),
+    var(--shadow-key);
   font-size: var(--text-lg);
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   touch-action: manipulation;
-  transition: background-color 120ms ease-out;
+  transition:
+    transform 100ms ease-out,
+    box-shadow 100ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.key[data-group='operator'] {
+  --key-bg: var(--color-key-operator-bg);
+  --key-text: var(--color-key-operator-text);
+  --key-edge: var(--color-key-operator-edge);
+}
+
+.key[data-group='action'] {
+  --key-bg: var(--color-key-action-bg);
+  --key-text: var(--color-key-action-text);
+  --key-edge: var(--color-key-action-edge);
 }
 
 .key:hover:not(:disabled) {
-  background: var(--color-border);
+  background-image: linear-gradient(var(--key-hover-highlight), var(--key-hover-highlight));
+  box-shadow:
+    0 3px 0 var(--key-edge),
+    var(--shadow-key),
+    var(--shadow-key);
+}
+
+.key:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--key-edge);
 }
 
 .key:disabled {
@@ -29,15 +71,16 @@
 }
 
 .equals {
-  grid-column: span 2;
-  border-color: var(--color-accent);
-  color: var(--color-accent-contrast);
-  background: var(--color-accent);
-}
+  --key-bg: var(--color-accent);
+  --key-text: var(--color-accent-contrast);
+  --key-edge: var(--color-accent-edge);
+  /* Lighter overlays than the pale keys so the accent keeps 4.5:1 under its text. */
+  --key-highlight: rgb(255 255 255 / 12%);
+  --key-hover-highlight: rgb(255 255 255 / 15%);
 
-.equals:hover:not(:disabled) {
-  background: var(--color-accent);
-  filter: brightness(1.1);
+  grid-column: span 2;
+  font-size: 1.15em;
+  font-weight: 700;
 }
 
 /* Inside the desktop panel (decision 37) keys scale with the viewport, never below 44 px. */
@@ -48,12 +91,7 @@
 
   .key {
     min-height: clamp(var(--tap-target), 8vh, 4rem);
-    background: var(--color-bg);
     font-size: clamp(1.125rem, 1.6vw, 1.5rem);
-  }
-
-  .equals {
-    background: var(--color-accent);
   }
 }
 
