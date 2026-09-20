@@ -1,0 +1,47 @@
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.key {
+  min-width: var(--tap-target);
+  min-height: var(--tap-target);
+  padding: var(--space-2);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 120ms ease-out;
+}
+
+.key:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.key:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.equals {
+  grid-column: span 2;
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+  background: var(--color-accent);
+}
+
+.equals:hover:not(:disabled) {
+  background: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .key {
+    transition: none;
+  }
+}

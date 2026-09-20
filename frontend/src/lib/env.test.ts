@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePositiveInt } from './env'
+import { apiBaseUrl, parsePositiveInt } from './env'
 
 describe('parsePositiveInt', () => {
   it.each([
@@ -21,5 +21,18 @@ describe('parsePositiveInt', () => {
     { raw: '9007199254740993' },
   ])('falls back for $raw', ({ raw }) => {
     expect(parsePositiveInt(raw, 7)).toBe(7)
+  })
+})
+
+describe('apiBaseUrl', () => {
+  it.each([
+    { origin: undefined, expected: '/api/v1' },
+    { origin: '', expected: '/api/v1' },
+    { origin: '  ', expected: '/api/v1' },
+    { origin: 'https://api.example.com', expected: 'https://api.example.com/api/v1' },
+    { origin: 'https://api.example.com/', expected: 'https://api.example.com/api/v1' },
+    { origin: 'http://localhost:8080//', expected: 'http://localhost:8080/api/v1' },
+  ])('resolves $origin to $expected', ({ origin, expected }) => {
+    expect(apiBaseUrl(origin)).toBe(expected)
   })
 })

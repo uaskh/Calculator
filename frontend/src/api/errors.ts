@@ -14,6 +14,8 @@ export interface ProblemDetails {
 export interface FieldError {
   field: string
   code: string
+  /** 0-based code-point index into the offending input, when the error has a location. */
+  position?: number
   message: string
 }
 

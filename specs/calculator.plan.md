@@ -63,7 +63,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | FR-9.5 | UI | No live request after a commit until the input changes (§4, D21) | After `=`, no POST until an edit | Must | `Calculator.test.tsx › committed` |
 | FR-9.6 | UI | Previous result stays; "Calculating…" only after 300 ms without response (§4, §7) | Response at 200 ms → never replaced; at 400 ms → `Calculating…` from 300 ms until it arrives | Must | `useCalculator.test.ts › slow` |
 | FR-9.7 | UI | "Evaluated as …" only on 200 with differing `expression`; hidden on error and after commit (§4, §7) | `2*(3+4`→`Evaluated as 2*(3+4)`; `  2+2 `→hidden; after error or `=`→hidden | Must | `Calculator.test.tsx › evaluated as` |
-| FR-10.1 | UI | Keypad layout, labels, `=` is `type=submit` spanning two columns (§7) | 22 buttons in spec order; aria-labels: clear, backspace, open parenthesis, close parenthesis, divide, multiply, subtract, add, decimal point, percent, square root, power, equals | Must | `Keypad.test.tsx › layout` |
+| FR-10.1 | UI | Keypad layout, labels, `=` is `type=submit` spanning two columns (§7) | 23 buttons in spec order; aria-labels: clear, backspace, open parenthesis, close parenthesis, divide, multiply, subtract, add, decimal point, percent, square root, power, equals | Must | `Keypad.test.tsx › layout` |
 | FR-10.2 | UI | Taps append ASCII tokens; `sqrt` inserts `sqrt(` (§4) | `7 × ( 2 + 1 )`→`7*(2+1)`, live `21`; `sqrt 1 6 )`→`sqrt(16)`, `4` | Must | `Calculator.test.tsx › keypad` |
 | FR-10.3 | UI | Keys append at the end, caret at end, focus stays on input (§7) | Caret at 0 in `12`, tap `3`→`123`, caret 3, input focused | Must | `Calculator.test.tsx › keypad focus` |
 | FR-10.4 | UI | Insert exceeding 1,024 characters ignored (§7) | 1,020 chars + `sqrt`→unchanged; 1,023 + `1`→1,024; then `1`→unchanged | Must | `model.test.ts › insertKey` |
@@ -164,6 +164,8 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | A-25 | Playwright covers 320 px with `page.setViewportSize` inside the desktop project; projects keep the template names with the spec's devices | No third project required |
 | A-26 | Access log `duration_ms` is an integer millisecond count; `error` holds the problem code and detail for 5xx and the panic value for panics | NFR-6 names the keys, not the formats |
 | A-28 | ESLint is pinned to major 9 (`eslint@^9`, `@eslint/js@^9`) because `eslint-plugin-jsx-a11y` 6.10 declares ESLint 3–9 support only; every other plugin supports 9 | Cleanest resolution of a peer conflict the template created; dev tooling only |
+| A-29 | Escape clears only while focus is in the expression input (the §7 keyboard list describes input shortcuts); keypad and history buttons are reached by Tab and act on Enter/Space | Focus returns to the input after every tap and commit, so Escape is available in the normal flow |
+| A-30 | While a new live request is pending, the previous status text stays visible until the next response, symmetrical with "the previous result stays visible"; "Calculating…" after 300 ms replaces the result, the status text and "Evaluated as …" | §7 defines the status region as replacing the result; edits clear alerts only (FR-13.6) |
 | A-27 | Ports: API 8080, Vite 5173, containers web 3000; Playwright uses 18080/14173 | Clarification guide defaults |
 
 ## 3. Architecture
@@ -291,11 +293,11 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - [ ] T-10 Wiring in `app`, black-box tests for the contract examples; `go vet`, lint, `-race`, coverage; commit `feat(api): …`
 
 ### Phase 5: Frontend
-- [ ] T-11 (FR-9, FR-13) `src/api/evaluate.ts` + MSW handler; `config.ts` base URL
-- [ ] T-12 (FR-10.4, FR-11.8/9, FR-12.1, FR-13.2/3/7, FR-14.3) `model.ts` reducer and helpers
-- [ ] T-13 (FR-9.2/3/5/6, FR-11.4, FR-13.4, D-4) `useCalculator.ts`
-- [ ] T-14 (FR-9.1/4/7, FR-10.1-3, FR-11, FR-12, FR-13.1/5/6, FR-14, UI-1..5) components, page composition, styles
-- [ ] T-15 (UI-6, NFR-2) tokens, contrast test, responsive polish; typecheck, lint, coverage, build; commit `feat(web): …`
+- [x] T-11 (FR-9, FR-13) `src/api/evaluate.ts` + MSW handler; `config.ts` base URL
+- [x] T-12 (FR-10.4, FR-11.8/9, FR-12.1, FR-13.2/3/7, FR-14.3) `model.ts` reducer and helpers
+- [x] T-13 (FR-9.2/3/5/6, FR-11.4, FR-13.4, D-4) `useCalculator.ts`
+- [x] T-14 (FR-9.1/4/7, FR-10.1-3, FR-11, FR-12, FR-13.1/5/6, FR-14, UI-1..5) components, page composition, styles
+- [x] T-15 (UI-6, NFR-2) tokens, contrast test, responsive polish; typecheck, lint, coverage, build; commit `feat(web): …`
 
 ### Phase 6: Integration and end-to-end
 - [ ] T-16 Black-box API journeys (`backend/test/e2e`)
