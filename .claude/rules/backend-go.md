@@ -10,9 +10,11 @@ feature slice in `.claude/skills/implement/references/backend-feature-pattern.md
 
 ## Dependencies
 
-- Standard library only. `go.mod` has a `module` and a `go` line and nothing else; there is
-  no `go.sum`. Hooks and the `depguard` linter enforce it. If a capability seems to need a
-  module, stop and ask the user.
+- Standard library plus exactly one approved module: `github.com/shopspring/decimal`
+  (exact decimal arithmetic for the calculator domain; spec `calculator` C-1, decision 14).
+  `go.mod` has the `module` and `go` lines and that single `require`; `go.sum` is written
+  by `go mod tidy` and committed. Hooks and the `depguard` linter enforce it. If a
+  capability seems to need any other module, stop and ask the user.
 - Use the toolchain that is installed (`go env GOVERSION`, ≥ 1.24); `go mod init` writes the
   matching `go` directive. Use modern standard library APIs available at that version
   (`http.ServeMux` method/wildcard patterns, `log/slog`, `errors.Join`, `slices`, `maps`,
@@ -25,7 +27,7 @@ feature slice in `.claude/skills/implement/references/backend-feature-pattern.md
 | `cmd/<service>` | flags, signals, exit codes; calls `app.New` and `server.Run` | app, config, server |
 | `internal/app` | composition root: constructs every dependency | everything below |
 | `internal/httpapi` | routes, handlers, DTOs, input validation, problem responses, middleware | domain packages |
-| `internal/<domain>` | business rules, domain types, sentinel/typed errors | standard library only |
+| `internal/<domain>` | business rules, domain types, sentinel/typed errors | standard library and `github.com/shopspring/decimal` |
 | `internal/config` | env → typed `Config`, defaults, validation | standard library only |
 | `internal/server` | `http.Server` construction, graceful shutdown | config |
 

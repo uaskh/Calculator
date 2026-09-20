@@ -12,11 +12,13 @@ This file defines *how* we build; the specs define *what*.
    deployment: **stop and ask the user** with `AskUserQuestion` (concrete options, the
    recommended one first, trade-offs stated). Never invent product behaviour. Record every
    answer in the plan's decision log, and user-visible ones in the README.
-2. **Backend = Go standard library only.** `net/http` (method + wildcard `ServeMux`
-   patterns), `encoding/json`, `log/slog`, `context`, `errors`, `testing`,
-   `net/http/httptest`. No web frameworks, routers, ORMs, DI containers, assertion or
-   mocking libraries; `go.mod` has no `require` block. Dev tools (golangci-lint,
-   govulncheck) are binaries, never module dependencies. Hooks enforce this.
+2. **Backend = Go standard library plus one approved module.** `net/http` (method +
+   wildcard `ServeMux` patterns), `encoding/json`, `log/slog`, `context`, `errors`,
+   `testing`, `net/http/httptest`. No web frameworks, routers, ORMs, DI containers,
+   assertion or mocking libraries. The only permitted module dependency is
+   `github.com/shopspring/decimal` (exact decimal arithmetic; spec `calculator` C-1,
+   decision 14), pinned in `go.mod` with `go.sum` committed. Dev tools (golangci-lint,
+   govulncheck) are binaries, never module dependencies. Hooks and `depguard` enforce this.
 3. **Frontend = React + strict TypeScript on Vite**, styled with CSS Modules and CSS custom
    properties; no UI kit, no CSS framework, no state-management library. Runtime
    dependencies stay at `react` + `react-dom`; any other dependency needs a one-line

@@ -10,7 +10,8 @@
 **Quality**
 - [ ] `make verify` passes: formatting, lint, typecheck, tests with the race detector,
       coverage thresholds, build, end-to-end. Quote the summary lines.
-- [ ] `backend/go.mod` has no requirements; frontend runtime dependencies are `react`,
+- [ ] `backend/go.mod` requires only `github.com/shopspring/decimal` (the single approved
+      module) with `go.sum` committed; frontend runtime dependencies are `react`,
       `react-dom` and anything the user approved.
 - [ ] No TODO/FIXME, commented-out code, debug output, skipped or focused tests.
 - [ ] Review: no open critical, high or medium findings; low ones are listed.
