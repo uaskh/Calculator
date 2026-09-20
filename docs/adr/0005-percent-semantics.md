@@ -24,6 +24,15 @@ the evaluator.
 - The rule lives in the operator table: the `+` and `-` entries carry a
   `percentRelativeRight` flag, and the `%` entry's evaluate function takes an optional base.
   The parser and evaluator read the table; they contain no knowledge of `%`.
+- This is the Strategy pattern realised with Go function values: each table entry holds
+  an interchangeable evaluation function (`binaryFunc` or `postfixFunc`) that the
+  evaluator calls without knowing which operator it is, in the same way `http.HandlerFunc`
+  and `slices.SortFunc` take a function instead of a one-method interface. Precedence and
+  associativity are plain data on the entry because the parser reads them rather than
+  calls them. An interface with one type per operator would give the same
+  interchangeability at the cost of four methods per operator, three returning constants;
+  it becomes worth it only if operators gain per-instance state or come from outside the
+  package.
 - The parser keeps parentheses as group nodes precisely because they change this rule.
 
 ## Consequences
