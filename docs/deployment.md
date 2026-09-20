@@ -57,10 +57,11 @@ sites do not document proxying to another origin. Netlify does, in one line.
 
 4. Under **Environment Variables** add:
 
-   | Key         | Value    | Why                                            |
-   | ----------- | -------- | ---------------------------------------------- |
-   | `HTTP_ADDR` | `:10000` | Render routes traffic to port 10000 by default |
-   | `LOG_LEVEL` | `info`   | default; `debug` while troubleshooting         |
+   | Key                   | Value    | Why                                                                          |
+   | --------------------- | -------- | ---------------------------------------------------------------------------- |
+   | `HTTP_ADDR`           | `:10000` | Render routes traffic to port 10000 by default                               |
+   | `HTTP_SHUTDOWN_DELAY` | `3s`     | keeps serving for 3 s after readiness flips, so a redeploy drops no requests |
+   | `LOG_LEVEL`           | `info`   | default; `debug` while troubleshooting                                       |
 
    Leave `CORS_ALLOWED_ORIGINS` unset: the browser never calls Render directly.
 

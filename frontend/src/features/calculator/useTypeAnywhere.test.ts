@@ -4,6 +4,8 @@ import { routeKey, useTypeAnywhere, type TypeAnywhereHandlers } from './useTypeA
 
 type KeyInit = Pick<KeyboardEventInit, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'isComposing'>
 
+const ALL_HANDLERS = ['onCharacter', 'onBackspace', 'onClear', 'onCommit', 'onFocus'] as const
+
 /** Dispatches a cancelable keydown on `target` and reports whether it was prevented. */
 function press(target: EventTarget, init: KeyInit): boolean {
   const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
@@ -24,7 +26,12 @@ function handlers(): TypeAnywhereHandlers {
     onBackspace: vi.fn<() => void>(),
     onClear: vi.fn<() => void>(),
     onCommit: vi.fn<() => void>(),
+    onFocus: vi.fn<() => void>(),
   }
+}
+
+function expectNoHandlerCalled(h: TypeAnywhereHandlers) {
+  for (const name of ALL_HANDLERS) expect(h[name], name).not.toHaveBeenCalled()
 }
 
 describe('routeKey (decision 38)', () => {
@@ -42,7 +49,7 @@ describe('routeKey (decision 38)', () => {
     { key: 'Tab', expected: null },
     { key: 'Shift', expected: null },
     { key: 'ArrowLeft', expected: null },
-    { key: 'Dead', expected: null },
+    { key: 'Dead', expected: { kind: 'focus' } },
     { key: 'Process', expected: null },
   ])('routes $key from the page background to $expected', ({ key, expected }) => {
     const event = new KeyboardEvent('keydown', { key })
@@ -64,6 +71,59 @@ describe('routeKey (decision 38)', () => {
     button.dispatchEvent(event)
 
     expect(routeKey(event)).toEqual(expected)
+  })
+
+  it.each([
+    { name: 'a link', element: () => mount('a', { href: '#top' }) },
+    { name: 'a summary', element: () => mount('summary') },
+    { name: 'an ARIA button', element: () => mount('span', { role: 'button', tabindex: '0' }) },
+    { name: 'an ARIA link', element: () => mount('span', { role: 'link', tabindex: '0' }) },
+    { name: 'a menu item', element: () => mount('li', { role: 'menuitem', tabindex: '0' }) },
+    {
+      name: 'a child of a link',
+      element: () => {
+        const child = document.createElement('span')
+        mount('a', { href: '#top' }).append(child)
+        return child
+      },
+    },
+  ])('leaves Enter and Space to $name but still routes characters', ({ element }) => {
+    const target = element()
+    for (const key of ['Enter', ' ']) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true })
+      target.dispatchEvent(event)
+      expect(routeKey(event), key).toBeNull()
+    }
+    const seven = new KeyboardEvent('keydown', { key: '7', bubbles: true })
+    target.dispatchEvent(seven)
+    expect(routeKey(seven)).toEqual({ kind: 'character', character: '7' })
+  })
+
+  it('leaves a link without href to the page background', () => {
+    const target = mount('a')
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    target.dispatchEvent(event)
+
+    expect(routeKey(event)).toEqual({ kind: 'commit' })
+  })
+
+  it.each(['7', 'Backspace', 'Escape', 'Enter', ' ', 'Dead'])(
+    'never takes %j once another listener has prevented it',
+    (key) => {
+      const event = new KeyboardEvent('keydown', { key, cancelable: true })
+      event.preventDefault()
+      document.body.dispatchEvent(event)
+
+      expect(routeKey(event)).toBeNull()
+    },
+  )
+
+  it('leaves a dead key in the expression input to the browser', () => {
+    const input = mount('input', { type: 'text' })
+    const event = new KeyboardEvent('keydown', { key: 'Dead', bubbles: true })
+    input.dispatchEvent(event)
+
+    expect(routeKey(event)).toBeNull()
   })
 
   it.each([
@@ -147,6 +207,46 @@ describe('useTypeAnywhere (decision 38)', () => {
     expect(h.onBackspace).toHaveBeenCalledOnce()
     expect(h.onClear).toHaveBeenCalledOnce()
     expect(h.onCommit).toHaveBeenCalledOnce()
+    expect(h.onFocus).not.toHaveBeenCalled()
+  })
+
+  it('focuses the input for a dead key on the background without preventing it', () => {
+    const h = handlers()
+    renderHook(() => {
+      useTypeAnywhere(h)
+    })
+
+    expect(press(document.body, { key: 'Dead' })).toBe(false)
+
+    expect(h.onFocus).toHaveBeenCalledOnce()
+    expect(h.onCharacter).not.toHaveBeenCalled()
+  })
+
+  it('ignores a dead key inside the input', () => {
+    const h = handlers()
+    const input = mount('input', { type: 'text' })
+    renderHook(() => {
+      useTypeAnywhere(h)
+    })
+
+    expect(press(input, { key: 'Dead' })).toBe(false)
+    expectNoHandlerCalled(h)
+  })
+
+  it('ignores a key another listener prevented first', () => {
+    const h = handlers()
+    renderHook(() => {
+      useTypeAnywhere(h)
+    })
+    const first = (event: KeyboardEvent) => {
+      event.preventDefault()
+    }
+    document.body.addEventListener('keydown', first)
+
+    press(document.body, { key: '7' })
+
+    document.body.removeEventListener('keydown', first)
+    expectNoHandlerCalled(h)
   })
 
   it('leaves Enter and Space on a button, Tab and modifier combinations untouched', () => {
@@ -162,10 +262,20 @@ describe('useTypeAnywhere (decision 38)', () => {
     expect(press(document.body, { key: 'r', metaKey: true })).toBe(false)
     expect(press(document.body, { key: 'c', ctrlKey: true })).toBe(false)
 
-    expect(h.onCharacter).not.toHaveBeenCalled()
-    expect(h.onBackspace).not.toHaveBeenCalled()
-    expect(h.onClear).not.toHaveBeenCalled()
-    expect(h.onCommit).not.toHaveBeenCalled()
+    expectNoHandlerCalled(h)
+  })
+
+  it('leaves Enter and Space on a link untouched', () => {
+    const h = handlers()
+    const link = mount('a', { href: '#top' })
+    renderHook(() => {
+      useTypeAnywhere(h)
+    })
+
+    expect(press(link, { key: 'Enter' })).toBe(false)
+    expect(press(link, { key: ' ' })).toBe(false)
+
+    expectNoHandlerCalled(h)
   })
 
   it('leaves keys in the expression input alone', () => {

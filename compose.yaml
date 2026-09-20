@@ -4,6 +4,7 @@ services:
       context: ./backend
     environment:
       LOG_LEVEL: info
+      HTTP_SHUTDOWN_DELAY: 3s
     ports:
       - "8080:8080"
     restart: unless-stopped

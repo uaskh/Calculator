@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -202,7 +203,14 @@ func TestEvaluate_BodyLimit(t *testing.T) {
 				if p := decodeProblemBody(t, rec); p.Code != CodePayloadTooLarge {
 					t.Errorf("code = %q, want %q", p.Code, CodePayloadTooLarge)
 				}
+				// Closing the connection after the reply saves net/http from draining the
+				// rest of an oversized body to keep the connection reusable.
+				if got := rec.Header().Get("Connection"); got != "close" {
+					t.Errorf("Connection = %q, want close on a 413", got)
+				}
 				assertCommonHeaders(t, rec.Header())
+			} else if got := rec.Header().Get("Connection"); got != "" {
+				t.Errorf("Connection = %q on an accepted body, want none", got)
 			}
 		})
 	}
@@ -364,9 +372,93 @@ func TestEvaluate_ClientCancellationWritesNothing(t *testing.T) {
 	if rec.Body.Len() != 0 {
 		t.Errorf("body written for a cancelled request: %s", rec.Body)
 	}
-	// The access log must not count an aborted live preview as a successful request.
-	if !strings.Contains(logs.String(), `"error":"request cancelled by the client"`) {
-		t.Errorf("cancellation is missing from the access log: %s", logs.String())
+	// The access log must neither count an aborted live preview as a successful 200 nor
+	// raise it as a fault: it is recorded as a cancelled request (499) at INFO.
+	entry := logLine(t, &logs)
+	if entry["level"] != "INFO" || entry["cancelled"] != true || entry["status"] != float64(statusClientClosedRequest) {
+		t.Errorf("access log = %v, want INFO with cancelled=true and status 499", entry)
+	}
+	if _, present := entry["error"]; present {
+		t.Errorf("a cancelled request logged an error: %v", entry["error"])
+	}
+}
+
+// brokenBody fails on the first read, like a connection the client dropped mid-body.
+type brokenBody struct{ err error }
+
+func (b brokenBody) Read([]byte) (int, error) { return 0, b.err }
+func (brokenBody) Close() error               { return nil }
+
+func TestEvaluate_BodyReadFailures(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		ctx           func(t *testing.T) context.Context
+		wantStatus    int // 0 means nothing is written
+		wantCode      string
+		wantCancelled bool
+	}{
+		{
+			name: "client gone mid-body",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				ctx, cancel := context.WithCancel(t.Context())
+				cancel()
+				return ctx
+			},
+			wantCancelled: true,
+		},
+		{
+			name: "deadline passed mid-body",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				ctx, cancel := context.WithDeadline(t.Context(), time.Unix(0, 0))
+				t.Cleanup(cancel)
+				return ctx
+			},
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   CodeTimeout,
+		},
+		{
+			name:       "truncated body with a live connection",
+			ctx:        func(t *testing.T) context.Context { t.Helper(); return t.Context() },
+			wantStatus: http.StatusBadRequest,
+			wantCode:   CodeMalformedRequest,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			d := testDeps()
+			d.RequestTimeout = 0 // the test controls the context itself
+			d.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", brokenBody{err: io.ErrUnexpectedEOF}).WithContext(tc.ctx(t))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			NewRouter(d).ServeHTTP(rec, req)
+
+			entry := logLine(t, &logs)
+			if tc.wantStatus == 0 {
+				if rec.Body.Len() != 0 {
+					t.Errorf("body written for a cancelled request: %s", rec.Body)
+				}
+				if entry["cancelled"] != true || entry["status"] != float64(statusClientClosedRequest) || entry["level"] != "INFO" {
+					t.Errorf("access log = %v, want cancelled=true, status 499 at INFO", entry)
+				}
+				return
+			}
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body %s", rec.Code, tc.wantStatus, rec.Body)
+			}
+			if p := decodeProblemBody(t, rec); p.Code != tc.wantCode {
+				t.Errorf("code = %q, want %q", p.Code, tc.wantCode)
+			}
+			if _, present := entry["cancelled"]; present {
+				t.Errorf("access log = %v, want no cancelled marker", entry)
+			}
+		})
 	}
 }
 

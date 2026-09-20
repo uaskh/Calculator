@@ -26,20 +26,31 @@ type Deps struct {
 	Evaluator Evaluator
 }
 
+// Health endpoints (spec §6): liveness has no dependencies, readiness fails during
+// shutdown. Their successful probes are logged at DEBUG to keep the access log readable.
+const (
+	healthPath    = "/healthz"
+	readinessPath = "/readyz"
+)
+
+func isHealthPath(p string) bool {
+	return p == healthPath || p == readinessPath
+}
+
 // NewRouter returns the service's root handler with all routes and middleware.
 func NewRouter(d Deps) http.Handler {
 	if d.Logger == nil {
 		d.Logger = slog.Default()
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /readyz", readiness(d.Ready))
+	mux.HandleFunc("GET "+healthPath, health)
+	mux.HandleFunc("GET "+readinessPath, readiness(d.Ready))
 	evaluate := newEvaluateHandler(d.Evaluator, d.MaxBodyBytes)
 	mux.HandleFunc("POST /api/v1/evaluate", evaluate.evaluate)
 
 	return chain(problemMux{mux},
 		requestID(d.Logger),
-		accessLog,
+		accessLog(time.Now),
 		recoverer,
 		securityHeaders,
 		cors(d.AllowedOrigins),
@@ -111,7 +122,6 @@ func readiness(check func(context.Context) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if check != nil {
 			if err := check(r.Context()); err != nil {
-				loggerFrom(r.Context()).WarnContext(r.Context(), "not ready", "error", err)
 				writeProblem(w, r, Problem{
 					Status: http.StatusServiceUnavailable,
 					Code:   CodeNotReady,

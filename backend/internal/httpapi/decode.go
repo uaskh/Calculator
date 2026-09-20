@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,38 +13,68 @@ import (
 	"strings"
 )
 
-// decodeJSON decodes exactly one JSON object from the request body into dst. It enforces
-// the media type and body size limit and rejects unknown fields and trailing data.
-// On failure it returns the problem to send; the caller must stop handling the request.
-func decodeJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) *Problem {
+// decodeJSON decodes exactly one JSON object from the request body into dst and reports
+// whether it succeeded. It enforces the media type and body size limit and rejects
+// unknown fields and trailing data. On failure the response has already been written
+// (or deliberately not, when the client went away) and the caller must stop handling
+// the request.
+func decodeJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) bool {
+	p, ctxErr := readJSON(w, r, maxBytes, dst)
+	switch {
+	case errors.Is(ctxErr, context.Canceled):
+		// The client dropped the connection mid-body: nobody is listening for a response.
+		stateFrom(r.Context()).setCancelled()
+		return false
+	case ctxErr != nil:
+		writeProblem(w, r, *timeoutProblem())
+		return false
+	case p == nil:
+		return true
+	}
+	if p.Code == CodePayloadTooLarge {
+		// Tell net/http to drop the connection after the reply instead of draining the
+		// rest of the oversized body to keep it reusable.
+		w.Header().Set("Connection", "close")
+	}
+	writeProblem(w, r, *p)
+	return false
+}
+
+// readJSON does the decoding. It returns the problem to send (nil on success), or the
+// request context's error when the body read was cut short because the context ended,
+// which is not a malformed request.
+func readJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) (*Problem, error) {
 	if !isJSON(r.Header.Get("Content-Type")) {
 		return &Problem{
 			Status: http.StatusUnsupportedMediaType,
 			Code:   CodeUnsupportedMediaType,
 			Detail: "Content-Type must be application/json.",
-		}
+		}, nil
 	}
 	// Read the whole (bounded) body first, so an oversized body is always a 413, whichever
 	// part of it crosses the limit.
 	body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBytes))
 	if readErr != nil {
-		return decodeProblem(readErr)
+		if ctxErr := r.Context().Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		return decodeProblem(readErr), nil
 	}
 	switch trimmed := bytes.TrimLeft(body, " \t\r\n"); {
 	case len(trimmed) == 0:
-		return malformed("Request body must not be empty.")
+		return malformed("Request body must not be empty."), nil
 	case trimmed[0] != '{':
-		return malformed("Request body must be a JSON object.")
+		return malformed("Request body must be a JSON object."), nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return decodeProblem(err)
+		return decodeProblem(err), nil
 	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return malformed("Request body must contain a single JSON object.")
+		return malformed("Request body must contain a single JSON object."), nil
 	}
-	return nil
+	return nil, nil
 }
 
 // isJSON accepts exactly the application/json media type, with any parameters (such as

@@ -60,19 +60,21 @@ func TestDecodeJSON(t *testing.T) {
 				req.Header.Set("Content-Type", tc.contentType)
 			}
 			var dst samplePayload
-			p := decodeJSON(httptest.NewRecorder(), req, limit, &dst)
+			rec := httptest.NewRecorder()
+			ok := decodeJSON(rec, req, limit, &dst)
 
 			if tc.wantStatus == 0 {
-				if p != nil {
-					t.Fatalf("decodeJSON() = %+v, want success", *p)
+				if !ok || rec.Body.Len() != 0 {
+					t.Fatalf("decodeJSON() = %v with body %q, want success and nothing written", ok, rec.Body)
 				}
 				return
 			}
-			if p == nil {
-				t.Fatalf("decodeJSON() = nil, want status %d", tc.wantStatus)
+			if ok {
+				t.Fatalf("decodeJSON() = true, want a %d problem", tc.wantStatus)
 			}
-			if p.Status != tc.wantStatus || p.Code != tc.wantCode || p.Detail == "" {
-				t.Errorf("problem = %+v, want status %d code %s and a detail", *p, tc.wantStatus, tc.wantCode)
+			p := decodeProblemBody(t, rec)
+			if rec.Code != tc.wantStatus || p.Status != tc.wantStatus || p.Code != tc.wantCode || p.Detail == "" {
+				t.Errorf("response = %d %+v, want status %d code %s and a detail", rec.Code, p, tc.wantStatus, tc.wantCode)
 			}
 			if tc.wantField != "" && (len(p.Errors) != 1 || p.Errors[0].Field != tc.wantField) {
 				t.Errorf("field errors = %+v, want one for %q", p.Errors, tc.wantField)
@@ -101,19 +103,21 @@ func FuzzDecodeJSON(f *testing.F) {
 		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 		req.Header.Set("Content-Type", contentType)
 		var dst samplePayload
+		rec := httptest.NewRecorder()
 
-		p := decodeJSON(httptest.NewRecorder(), req, 64, &dst)
-
-		if p == nil {
+		if decodeJSON(rec, req, 64, &dst) {
+			if rec.Body.Len() != 0 {
+				t.Fatalf("decodeJSON(%q, %q) succeeded but wrote %q", contentType, body, rec.Body)
+			}
 			return
 		}
-		switch p.Status {
+		switch rec.Code {
 		case http.StatusBadRequest, http.StatusRequestEntityTooLarge, http.StatusUnsupportedMediaType:
 		default:
-			t.Fatalf("decodeJSON(%q, %q) status = %d", contentType, body, p.Status)
+			t.Fatalf("decodeJSON(%q, %q) status = %d", contentType, body, rec.Code)
 		}
-		if p.Code == "" || p.Detail == "" {
-			t.Fatalf("decodeJSON(%q, %q) = %+v, want a code and a detail", contentType, body, *p)
+		if p := decodeProblemBody(t, rec); p.Code == "" || p.Detail == "" {
+			t.Fatalf("decodeJSON(%q, %q) = %+v, want a code and a detail", contentType, body, p)
 		}
 	})
 }

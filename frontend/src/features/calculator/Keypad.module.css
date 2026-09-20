@@ -62,3 +62,10 @@
     transition: none;
   }
 }
+
+/* A printed page shows the expression, result and history; the keys have nothing to do. */
+@media print {
+  .keypad {
+    display: none;
+  }
+}

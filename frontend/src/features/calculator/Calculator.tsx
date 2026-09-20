@@ -68,10 +68,12 @@ export function Calculator() {
       applyAndFocus(clear)
     },
     onCommit: commitAndFocus,
+    onFocus: focusInputAtEnd,
   })
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key !== 'Escape') return
+    // Escape during an IME composition cancels the composition, never the expression.
+    if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
     event.preventDefault()
     applyAndFocus(clear)
   }

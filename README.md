@@ -146,19 +146,21 @@ another backend: `API_PROXY_TARGET=http://localhost:9090 make run-frontend`.
 All variables are optional. Invalid values are reported together and stop the process at
 startup.
 
-| Variable                   | Default | Description                                                                                                |
-| -------------------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
-| `HTTP_ADDR`                | `:8080` | Listen address                                                                                             |
-| `HTTP_READ_HEADER_TIMEOUT` | `5s`    | `http.Server` ReadHeaderTimeout                                                                            |
-| `HTTP_READ_TIMEOUT`        | `10s`   | `http.Server` ReadTimeout                                                                                  |
-| `HTTP_WRITE_TIMEOUT`       | `15s`   | `http.Server` WriteTimeout; must be longer than `HTTP_REQUEST_TIMEOUT`                                     |
-| `HTTP_IDLE_TIMEOUT`        | `60s`   | Keep-alive idle timeout                                                                                    |
-| `HTTP_SHUTDOWN_TIMEOUT`    | `10s`   | Grace period for in-flight requests on SIGINT/SIGTERM                                                      |
-| `HTTP_REQUEST_TIMEOUT`     | `5s`    | Handler deadline; when exceeded the response is 503 `TIMEOUT`                                              |
-| `HTTP_MAX_BODY_BYTES`      | `4096`  | Request body limit; larger bodies get 413 `PAYLOAD_TOO_LARGE`                                              |
-| `LOG_LEVEL`                | `info`  | `debug`, `info`, `warn` or `error`                                                                         |
-| `LOG_FORMAT`               | `json`  | `json` or `text` (`make dev` and `make run-backend` use `text`)                                            |
-| `CORS_ALLOWED_ORIGINS`     | empty   | Comma-separated exact origins (`https://app.example.com`). Empty disables CORS; `*` is rejected at startup |
+| Variable                   | Default   | Description                                                                                                |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------- |
+| `HTTP_ADDR`                | `:8080`   | Listen address                                                                                             |
+| `HTTP_READ_HEADER_TIMEOUT` | `5s`      | `http.Server` ReadHeaderTimeout                                                                            |
+| `HTTP_READ_TIMEOUT`        | `10s`     | `http.Server` ReadTimeout                                                                                  |
+| `HTTP_WRITE_TIMEOUT`       | `15s`     | `http.Server` WriteTimeout; must be longer than `HTTP_REQUEST_TIMEOUT`                                     |
+| `HTTP_IDLE_TIMEOUT`        | `60s`     | Keep-alive idle timeout                                                                                    |
+| `HTTP_SHUTDOWN_TIMEOUT`    | `10s`     | Grace period for in-flight requests on SIGINT/SIGTERM; when it passes, open connections are closed         |
+| `HTTP_SHUTDOWN_DELAY`      | `0s`      | After `/readyz` flips to 503, keep accepting connections this long before draining (`compose.yaml`: `3s`)  |
+| `HTTP_REQUEST_TIMEOUT`     | `5s`      | Handler deadline; when exceeded the response is 503 `TIMEOUT`                                              |
+| `HTTP_MAX_BODY_BYTES`      | `4096`    | Request body limit; larger bodies get 413 `PAYLOAD_TOO_LARGE`                                              |
+| `HTTP_MAX_HEADER_BYTES`    | `1048576` | `http.Server` MaxHeaderBytes; larger request headers get 431                                               |
+| `LOG_LEVEL`                | `info`    | `debug`, `info`, `warn` or `error`                                                                         |
+| `LOG_FORMAT`               | `json`    | `json` or `text` (`make dev` and `make run-backend` use `text`)                                            |
+| `CORS_ALLOWED_ORIGINS`     | empty     | Comma-separated exact origins (`https://app.example.com`). Empty disables CORS; `*` is rejected at startup |
 
 ### Frontend
 
@@ -244,7 +246,9 @@ characters (closing parentheses added to a 1,024-character input).
   the end) and Enter on the background commits; Enter and Space on a button activate that
   button as usual. Tab order is unchanged: Tab reaches every key, and focus returns to the
   input after keypad taps, `=`, `C` and history activation. Keys with Ctrl, Alt or Cmd are
-  left to the browser. There are no other shortcuts.
+  left to the browser. On dead-key layouts, a dead key pressed outside the input only moves
+  focus into it, so the browser completes the accent sequence there. There are no other
+  shortcuts.
 - Every keypad key is at least 44 × 44 px. Non-digit keys have accessible names ("divide",
   "multiply", "backspace", …); the `sqrt` key is named "sqrt, square root" so the visible
   label is part of the name (WCAG 2.5.3).
@@ -255,7 +259,8 @@ characters (closing parentheses added to a 1,024-character input).
   (checked by a unit test over the design tokens and by axe in the browser suite).
   Transitions are disabled under `prefers-reduced-motion`.
 - Long inputs and results scroll horizontally inside their fields; the page never scrolls
-  sideways at 320 px, 412 px, 1280 px or 1920 px.
+  sideways at 320 px, 412 px, 767 px, 768 px, 1280 px or 1920 px.
+- Printing uses the light palette regardless of the colour scheme and omits the keypad.
 
 ## API
 
@@ -526,11 +531,18 @@ curl -s http://localhost:8080/readyz
 
 ### Observability
 
-Each request produces one `log/slog` line with `request_id`, `method`, `path`, `status`,
-`duration_ms`, `bytes`, `remote_addr` and `user_agent`; 5xx responses, recovered panics
-and client cancellations add `error`. A panic before the response is written becomes a
-500 `INTERNAL_ERROR`. The process shuts down gracefully on SIGINT or SIGTERM: `/readyz`
-flips to 503, in-flight requests get `HTTP_SHUTDOWN_TIMEOUT` to finish.
+On startup the process logs one `starting` line with its effective configuration, Go
+version and VCS revision. Each request then produces one `log/slog` line with
+`request_id`, `method`, `path`, `status`, `duration_ms` (fractional), `bytes`,
+`remote_addr`, `forwarded_for` (when a proxy sets `X-Forwarded-For`) and `user_agent`.
+Problem responses add `code` (and `error_code` for the field error), so failures can be
+counted by cause; faults (5xx other than `NOT_READY`, and recovered panics) add `error`
+and log at ERROR; a request the client abandoned logs at INFO with `cancelled: true` and
+status 499; successful health checks log at DEBUG. A panic before the response is written
+becomes a 500 `INTERNAL_ERROR`. The process shuts down gracefully on SIGINT or SIGTERM:
+`/readyz` flips to 503, the server keeps serving for `HTTP_SHUTDOWN_DELAY` so load
+balancers can drain it, then in-flight requests get `HTTP_SHUTDOWN_TIMEOUT` to finish
+before remaining connections are closed; a second signal stops the process immediately.
 
 ## Testing
 
@@ -545,18 +557,18 @@ flips to 503, in-flight requests get `HTTP_SHUTDOWN_TIMEOUT` to finish.
 
 What the suites contain (at commit `b74872e`):
 
-- Go: 940 test cases including subtests, across domain tables, fuzz targets
+- Go: 994 test cases including subtests, across domain tables, fuzz targets
   (`FuzzEvaluate`, `FuzzDecodeJSON`, `FuzzValidRequestID`), handler tests and black-box
   API tests.
-- Vitest: 273 tests in 14 files (reducer, hook with fake timers, API client with MSW,
+- Vitest: 360 tests in 16 files (reducer, hook with fake timers, API client with MSW,
   components, contrast maths).
-- Playwright: 90 tests in 6 spec files, run on both projects: journeys, errors and
+- Playwright: 118 tests in 7 spec files, run on both projects: journeys, errors and
   recovery via `page.route`, keyboard-only use, axe WCAG 2.2 AA in light and dark themes,
   44 px targets and no horizontal overflow at 320, 412 and 1280 px.
 
 Coverage (from [`docs/coverage.md`](docs/coverage.md)): backend 97.0% of statements
-(`cmd/api` 92.5, `app` 100, `calc` 98.8, `config` 100, `httpapi` 94.4, `server` 92.3);
-frontend 100% lines, 98.6% statements, 100% functions, 96.0% branches. Thresholds are 80%
+(`cmd/api` 94.7, `app` 100, `calc` 98.8, `config` 100, `httpapi` 94.9, `server` 90.0);
+frontend 100% lines, 98.5% statements, 100% functions, 96.3% branches. Thresholds are 80%
 per side and 90% for the domain package. Run `make coverage` and open
 `coverage/backend/index.html` or `coverage/frontend/index.html`.
 

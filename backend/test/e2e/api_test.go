@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/aksh/calculator/backend/internal/app"
-	"github.com/aksh/calculator/backend/internal/calc"
 	"github.com/aksh/calculator/backend/internal/config"
 )
 
@@ -24,7 +23,7 @@ func newApp(t *testing.T, env map[string]string) (*app.App, *httptest.Server) {
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	a := app.New(cfg, slog.New(slog.DiscardHandler), calc.New())
+	a := app.New(cfg, slog.New(slog.DiscardHandler))
 	srv := httptest.NewServer(a.Handler)
 	t.Cleanup(srv.Close)
 	return a, srv

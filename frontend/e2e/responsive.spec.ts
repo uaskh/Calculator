@@ -11,6 +11,9 @@ const MAXIMAL_RESULT = `-1${'0'.repeat(99)}.1234567890123456`
 
 const VIEWPORTS = [
   { name: '320×640', size: { width: 320, height: 640 } },
+  // Either side of the 48rem tablet breakpoint (src/styles/tokens.css).
+  { name: '767×720', size: { width: 767, height: 720 } },
+  { name: '768×720', size: { width: 768, height: 720 } },
   { name: '1280×720', size: { width: 1280, height: 720 } },
   { name: '1920×1080', size: { width: 1920, height: 1080 } },
   // The project's own viewport: Pixel 7 on mobile-chromium, Desktop Chrome on desktop-chromium.

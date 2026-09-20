@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useReducer } from 'react'
-import { toApiError } from '../../api/errors'
+import { useCallback, useEffect, useEffectEvent, useReducer } from 'react'
+import { toApiError, type ApiError } from '../../api/errors'
 import { evaluate } from '../../api/evaluate'
 import { useApi } from '../../api/useApi'
+import { reportFailure, type FailureReporter } from '../../lib/report'
 import { calculatorReducer, initialState, type CalculatorState, type KeypadKey } from './model'
 
 /** Quiet time after the last edit before the live request is sent. */
@@ -21,16 +22,37 @@ export interface Calculator {
   activateHistory: (index: number) => void
 }
 
+/** Statuses the UI explains fully (validation and arithmetic errors): nothing to report. */
+const EXPLAINED_STATUSES = new Set([400, 422])
+
+/** Whether a failure is one the user cannot resolve alone, so support may need to trace it. */
+function isUnexpected(error: ApiError): boolean {
+  return error.status === undefined || !EXPLAINED_STATUSES.has(error.status)
+}
+
 /**
  * Orchestrates the calculator: the reducer decides, this hook schedules. Whenever the
  * phase, expression or revision changes, the previous request (or pending debounce) is
  * cancelled; a `live` phase schedules one request after the debounce, a `committing` phase
  * sends one immediately. Responses of cancelled requests never reach the reducer.
+ * Unexpected failures (anything but a 400, a 422 or a cancellation) are also passed to
+ * `report` so support can find the request by its ID.
  */
-export function useCalculator(): Calculator {
+export function useCalculator(report: FailureReporter = reportFailure): Calculator {
   const api = useApi()
   const [state, dispatch] = useReducer(calculatorReducer, initialState)
   const { phase, expression, revision } = state
+
+  // An effect event so a new reporter identity never restarts (and so aborts) a request.
+  const reportUnexpected = useEffectEvent((error: ApiError) => {
+    if (!isUnexpected(error)) return
+    report('evaluate request failed', {
+      kind: error.kind,
+      status: error.status,
+      code: error.code,
+      requestId: error.problem?.requestId,
+    })
+  })
 
   useEffect(() => {
     if ((phase !== 'live' && phase !== 'committing') || expression.trim() === '') return
@@ -51,6 +73,7 @@ export function useCalculator(): Calculator {
         if (controller.signal.aborted) return
         const apiError = toApiError(error)
         if (apiError.kind === 'aborted') return
+        reportUnexpected(apiError)
         dispatch({ type: live ? 'liveFailed' : 'commitFailed', error: apiError })
       } finally {
         clearTimeout(slowTimer)

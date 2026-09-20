@@ -25,7 +25,7 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(cfg, slog.New(slog.DiscardHandler), fakeEvaluator{})
+	return NewWithEvaluator(cfg, slog.New(slog.DiscardHandler), fakeEvaluator{})
 }
 
 func get(h http.Handler, path string) *httptest.ResponseRecorder {
@@ -81,6 +81,26 @@ func TestApp_WiresTheEvaluator(t *testing.T) {
 	}
 }
 
+// TestApp_NewBuildsTheCalculator proves the composition root owns the domain: New needs
+// nothing but configuration and a logger, and the wired service evaluates for real.
+func TestApp_NewBuildsTheCalculator(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.Load(func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(cfg, slog.New(slog.DiscardHandler))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", strings.NewReader(`{"expression":"200+10%"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	a.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "{\"expression\":\"200+10%\",\"result\":\"220\"}\n" {
+		t.Fatalf("POST /api/v1/evaluate = %d %q, want the real calculator's answer", rec.Code, rec.Body)
+	}
+}
+
 func TestApp_AppliesConfiguredLimits(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.Load(func(k string) string {
@@ -89,7 +109,7 @@ func TestApp_AppliesConfiguredLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(cfg, slog.New(slog.DiscardHandler), fakeEvaluator{})
+	a := NewWithEvaluator(cfg, slog.New(slog.DiscardHandler), fakeEvaluator{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", strings.NewReader(`{"expression":"`+strings.Repeat("1", 40)+`"}`))
 	req.Header.Set("Content-Type", "application/json")

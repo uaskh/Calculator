@@ -27,8 +27,12 @@ type HTTP struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
-	RequestTimeout    time.Duration
-	MaxBodyBytes      int64
+	// ShutdownDelay is how long the server keeps serving after readiness flips to 503 and
+	// before it stops accepting connections, so load balancers can drain it first.
+	ShutdownDelay  time.Duration
+	RequestTimeout time.Duration
+	MaxBodyBytes   int64
+	MaxHeaderBytes int
 }
 
 // Load reads the configuration through getenv (os.Getenv in production) and validates it.
@@ -43,8 +47,10 @@ func Load(getenv func(string) string) (Config, error) {
 			WriteTimeout:      r.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
 			IdleTimeout:       r.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
 			ShutdownTimeout:   r.duration("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
+			ShutdownDelay:     r.delay("HTTP_SHUTDOWN_DELAY", 0),
 			RequestTimeout:    r.duration("HTTP_REQUEST_TIMEOUT", 5*time.Second),
-			MaxBodyBytes:      r.positiveInt("HTTP_MAX_BODY_BYTES", 4096),
+			MaxBodyBytes:      int64(r.positiveInt("HTTP_MAX_BODY_BYTES", 4096)),
+			MaxHeaderBytes:    r.positiveInt("HTTP_MAX_HEADER_BYTES", 1<<20),
 		},
 		LogLevel:       r.logLevel("LOG_LEVEL", slog.LevelInfo),
 		LogFormat:      r.oneOf("LOG_FORMAT", "json", "json", "text"),
@@ -94,12 +100,26 @@ func (r *reader) duration(key string, def time.Duration) time.Duration {
 	return d
 }
 
-func (r *reader) positiveInt(key string, def int64) int64 {
+// delay reads a duration that may be zero but not negative.
+func (r *reader) delay(key string, def time.Duration) time.Duration {
 	raw, ok := r.lookup(key)
 	if !ok {
 		return def
 	}
-	n, err := strconv.ParseInt(raw, 10, 64)
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		r.fail("%s must be a duration of zero or more such as 3s, got %q", key, raw)
+		return def
+	}
+	return d
+}
+
+func (r *reader) positiveInt(key string, def int) int {
+	raw, ok := r.lookup(key)
+	if !ok {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
 		r.fail("%s must be a positive integer, got %q", key, raw)
 		return def

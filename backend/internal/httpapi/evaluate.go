@@ -58,8 +58,7 @@ type evaluateResponse struct {
 
 func (h evaluateHandler) evaluate(w http.ResponseWriter, r *http.Request) {
 	var req evaluateRequest
-	if p := decodeJSON(w, r, h.maxBodyBytes, &req); p != nil {
-		writeProblem(w, r, *p)
+	if !decodeJSON(w, r, h.maxBodyBytes, &req) {
 		return
 	}
 	if errs := req.validate(); len(errs) > 0 {
@@ -107,18 +106,25 @@ func (h evaluateHandler) writeEvaluateError(w http.ResponseWriter, r *http.Reque
 			Detail: detail,
 		})
 	case errors.Is(err, context.DeadlineExceeded):
-		writeProblem(w, r, Problem{
-			Status: http.StatusServiceUnavailable,
-			Code:   CodeTimeout,
-			Detail: "The calculation took too long.",
-		})
+		writeProblem(w, r, *timeoutProblem())
 	case errors.Is(err, context.Canceled):
 		// The client went away; nobody is listening for a body. Mark the request so the
-		// access log does not count it as a successful 200 (live previews abort often).
-		stateFrom(ctx).setError("request cancelled by the client")
+		// access log reports it as cancelled rather than as a successful 200 (live
+		// previews abort often) or as a fault.
+		stateFrom(ctx).setCancelled()
 	default:
 		loggerFrom(ctx).ErrorContext(ctx, "evaluate expression", "error", err)
 		writeProblem(w, r, Problem{Status: http.StatusInternalServerError, Code: CodeInternal})
+	}
+}
+
+// timeoutProblem is the 503 sent when the request's deadline passes, whether during
+// evaluation or while the body is still being read.
+func timeoutProblem() *Problem {
+	return &Problem{
+		Status: http.StatusServiceUnavailable,
+		Code:   CodeTimeout,
+		Detail: "The calculation took too long.",
 	}
 }
 

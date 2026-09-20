@@ -3,9 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +122,90 @@ func TestRun_StartupErrors(t *testing.T) {
 			got := run(t.Context(), tc.args, envMap(tc.env), &bytes.Buffer{}, &bytes.Buffer{})
 			if got != tc.want {
 				t.Errorf("run() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRun_LogsConfigurationAtStartup asserts the one-line startup summary. The listen
+// address is invalid so run returns right after logging it, without opening a socket.
+func TestRun_LogsConfigurationAtStartup(t *testing.T) {
+	t.Parallel()
+	var stdout, stderr bytes.Buffer
+	env := map[string]string{
+		"HTTP_ADDR":            "256.256.256.256:0",
+		"HTTP_SHUTDOWN_DELAY":  "3s",
+		"LOG_LEVEL":            "debug",
+		"CORS_ALLOWED_ORIGINS": "http://localhost:5173",
+	}
+
+	if code := run(t.Context(), nil, envMap(env), &stdout, &stderr); code != 1 {
+		t.Fatalf("run() = %d, want 1 for an unusable address", code)
+	}
+
+	var entry map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout.String()), "\n") {
+		var candidate map[string]any
+		if err := json.Unmarshal([]byte(line), &candidate); err != nil {
+			t.Fatalf("log line is not JSON: %s", line)
+		}
+		if candidate["msg"] == "starting" {
+			entry = candidate
+		}
+	}
+	if entry == nil {
+		t.Fatalf("no \"starting\" line in: %s", stdout.String())
+	}
+	want := map[string]any{
+		"level":                "INFO",
+		"addr":                 "256.256.256.256:0",
+		"log_level":            "debug",
+		"log_format":           "json",
+		"read_header_timeout":  "5s",
+		"read_timeout":         "10s",
+		"write_timeout":        "15s",
+		"idle_timeout":         "1m0s",
+		"shutdown_timeout":     "10s",
+		"shutdown_delay":       "3s",
+		"request_timeout":      "5s",
+		"max_body_bytes":       float64(4096),
+		"max_header_bytes":     float64(1 << 20),
+		"cors_allowed_origins": []any{"http://localhost:5173"},
+		"go_version":           runtime.Version(),
+	}
+	for key, value := range want {
+		if !reflect.DeepEqual(entry[key], value) {
+			t.Errorf("starting[%s] = %v (%T), want %v", key, entry[key], entry[key], value)
+		}
+	}
+	for _, key := range []string{"vcs_revision", "vcs_modified"} {
+		if v, ok := entry[key].(string); !ok || v == "" {
+			t.Errorf("starting[%s] = %v, want a non-empty string (\"unknown\" without build info)", key, entry[key])
+		}
+	}
+}
+
+func TestBuildInfo_ReportsUnknownWithoutVCSSettings(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		info         *debug.BuildInfo
+		wantRevision string
+		wantModified string
+	}{
+		{"no build info", nil, "unknown", "unknown"},
+		{"no vcs settings", &debug.BuildInfo{}, "unknown", "unknown"},
+		{"vcs settings", &debug.BuildInfo{Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "abc123"},
+			{Key: "vcs.modified", Value: "true"},
+		}}, "abc123", "true"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			revision, modified := vcsInfo(tc.info)
+			if revision != tc.wantRevision || modified != tc.wantModified {
+				t.Errorf("vcsInfo() = %q, %q; want %q, %q", revision, modified, tc.wantRevision, tc.wantModified)
 			}
 		})
 	}

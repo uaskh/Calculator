@@ -4,6 +4,7 @@ import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import type { HttpClient, RequestOptions } from '../../api/client'
+import type { FailureReporter } from '../../lib/report'
 import { EVALUATE_URL, problemResponse } from '../../test/msw/handlers'
 import { server } from '../../test/msw/server'
 import { createAppClient } from '../../test/render'
@@ -38,11 +39,14 @@ function recordingClient(inner: HttpClient, sent: { expression: string; signal?:
   return { ...inner, post }
 }
 
-function setup(client: HttpClient = createAppClient()) {
+function setup(client: HttpClient = createAppClient(), report?: FailureReporter) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(ApiProvider, { client, children })
-  return renderHook(() => useCalculator(), { wrapper })
+  return renderHook(() => (report ? useCalculator(report) : useCalculator()), { wrapper })
 }
+
+/** The request ID `problemResponse` puts in every problem body. */
+const PROBLEM_REQUEST_ID = '4f9c0e7d8a1b2c3d4e5f60718293a4b5'
 
 /** Lets MSW and the client settle without advancing the fake clock. */
 async function settle() {
@@ -460,6 +464,123 @@ describe('useCalculator', () => {
     await advance(1)
     expect(sent.map((r) => r.expression)).toEqual(['2+2', '3*3', '2+2'])
     expect(result.current.state.result).toBe('4')
+  })
+
+  describe('failure reporting for support', () => {
+    it('reports a 503 with its kind, status, code and request ID', async () => {
+      server.use(http.post(EVALUATE_URL, () => problemResponse(503, 'TIMEOUT')))
+      const report = vi.fn<FailureReporter>()
+      const { result } = setup(createAppClient(), report)
+
+      act(() => {
+        result.current.edit('2+2')
+      })
+      await advance(DEBOUNCE_MS)
+
+      expect(result.current.state.message).toEqual({ kind: 'status', text: UNAVAILABLE })
+      expect(report).toHaveBeenCalledExactlyOnceWith('evaluate request failed', {
+        kind: 'http',
+        status: 503,
+        code: 'TIMEOUT',
+        requestId: PROBLEM_REQUEST_ID,
+      })
+    })
+
+    it('reports a network failure without status, code or request ID', async () => {
+      server.use(http.post(EVALUATE_URL, () => HttpResponse.error()))
+      const report = vi.fn<FailureReporter>()
+      const { result } = setup(createAppClient(), report)
+
+      act(() => {
+        result.current.edit('2+2')
+        result.current.commit()
+      })
+      await advance(0)
+
+      expect(result.current.state.message).toEqual({ kind: 'alert', text: UNAVAILABLE })
+      expect(report).toHaveBeenCalledExactlyOnceWith('evaluate request failed', {
+        kind: 'network',
+        status: undefined,
+        code: undefined,
+        requestId: undefined,
+      })
+    })
+
+    it('reports a response the client cannot parse', async () => {
+      server.use(http.post(EVALUATE_URL, () => HttpResponse.json({ unexpected: true })))
+      const report = vi.fn<FailureReporter>()
+      const { result } = setup(createAppClient(), report)
+
+      act(() => {
+        result.current.edit('2+2')
+      })
+      await advance(DEBOUNCE_MS)
+
+      expect(report).toHaveBeenCalledExactlyOnceWith('evaluate request failed', {
+        kind: 'invalid-response',
+        status: 200,
+        code: undefined,
+        requestId: undefined,
+      })
+    })
+
+    it.each([
+      { name: 'a 400 validation error', expression: '2+3)' },
+      { name: 'a 422 arithmetic error', expression: '1/0' },
+    ])('does not report $name', async ({ expression }) => {
+      const report = vi.fn<FailureReporter>()
+      const { result } = setup(createAppClient(), report)
+
+      act(() => {
+        result.current.edit(expression)
+      })
+      await advance(DEBOUNCE_MS)
+      act(() => {
+        result.current.commit()
+      })
+      await advance(0)
+
+      expect(result.current.state.message?.kind).toBe('alert')
+      expect(report).not.toHaveBeenCalled()
+    })
+
+    it('does not report a request that was aborted by a newer edit', async () => {
+      const pending: Deferred[] = []
+      server.use(deferredHandler(pending))
+      const report = vi.fn<FailureReporter>()
+      const { result } = setup(createAppClient(), report)
+
+      act(() => {
+        result.current.edit('2+2')
+      })
+      await advance(DEBOUNCE_MS)
+      expect(pending).toHaveLength(1)
+      act(() => {
+        result.current.clear()
+      })
+      await settle()
+      await advance(DEBOUNCE_MS)
+
+      expect(report).not.toHaveBeenCalled()
+    })
+
+    it('warns on the console by default', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      server.use(http.post(EVALUATE_URL, () => problemResponse(500, 'INTERNAL_ERROR')))
+      const { result } = setup()
+
+      act(() => {
+        result.current.edit('2+2')
+      })
+      await advance(DEBOUNCE_MS)
+
+      expect(warn).toHaveBeenCalledExactlyOnceWith('evaluate request failed', {
+        kind: 'http',
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        requestId: PROBLEM_REQUEST_ID,
+      })
+    })
   })
 
   it('appends keypad tokens and removes characters through the reducer', async () => {

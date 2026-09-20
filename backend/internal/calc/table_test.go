@@ -15,7 +15,7 @@ func (n *numbers) concatDigits(_ context.Context, left, right decimal.Decimal) (
 	return n.intermediate(left.Mul(decimal.NewFromInt(10)).Add(right))
 }
 
-// double is a postfix operator: x! = 2x. It ignores the additive base.
+// double is a postfix operator: x! = 2x. It has no relativeTo, so it never gets a base.
 func (n *numbers) double(operand decimal.Decimal, _ *decimal.Decimal) (decimal.Decimal, error) {
 	return n.intermediate(operand.Mul(decimal.NewFromInt(2)))
 }

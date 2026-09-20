@@ -109,27 +109,45 @@ func logLine(t *testing.T, logs *bytes.Buffer) map[string]any {
 	return entry
 }
 
+// fakeClock advances by step on every call, so durations are deterministic.
+func fakeClock(step time.Duration) func() time.Time {
+	now := time.Date(2026, time.September, 20, 12, 0, 0, 0, time.UTC)
+	return func() time.Time {
+		now = now.Add(step)
+		return now
+	}
+}
+
+// logged runs h through the request ID and access log middleware with a JSON logger at
+// DEBUG level and returns the access-log line for req.
+func logged(t *testing.T, h http.Handler, req *http.Request, clock func() time.Time) map[string]any {
+	t.Helper()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	chain(h, requestID(logger), accessLog(clock)).ServeHTTP(httptest.NewRecorder(), req)
+	return logLine(t, &logs)
+}
+
 func TestAccessLog(t *testing.T) {
 	t.Parallel()
-	var logs bytes.Buffer
-	h := chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 		_, _ = w.Write([]byte("short and stout"))
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog)
+	})
 	req := httptest.NewRequest(http.MethodGet, "/brew?strong=1", http.NoBody)
 	req.Header.Set(requestIDHeader, "trace-1")
 	req.Header.Set("User-Agent", "kettle/2.0")
 	req.RemoteAddr = "192.0.2.10:4242"
 
-	h.ServeHTTP(httptest.NewRecorder(), req)
+	entry := logged(t, h, req, fakeClock(1500*time.Microsecond))
 
-	entry := logLine(t, &logs)
 	want := map[string]any{
 		"level":       "INFO",
 		"request_id":  "trace-1",
 		"method":      "GET",
 		"path":        "/brew",
 		"status":      float64(http.StatusTeapot),
+		"duration_ms": 1.5,
 		"bytes":       float64(15),
 		"remote_addr": "192.0.2.10:4242",
 		"user_agent":  "kettle/2.0",
@@ -139,58 +157,240 @@ func TestAccessLog(t *testing.T) {
 			t.Errorf("log[%s] = %v (%T), want %v", key, entry[key], entry[key], value)
 		}
 	}
-	if ms, isNumber := entry["duration_ms"].(float64); !isNumber || ms < 0 || ms != float64(int64(ms)) {
-		t.Errorf("duration_ms = %v (%T), want a non-negative integer", entry["duration_ms"], entry["duration_ms"])
+	for _, key := range []string{"error", "code", "error_code", "cancelled", "forwarded_for"} {
+		if _, present := entry[key]; present {
+			t.Errorf("a plain 418 response logged %s: %v", key, entry[key])
+		}
 	}
-	if _, present := entry["error"]; present {
-		t.Errorf("a 418 response logged an error: %v", entry["error"])
+}
+
+func TestAccessLog_DurationHasSubMillisecondResolution(t *testing.T) {
+	t.Parallel()
+	entry := logged(t, ok, httptest.NewRequest(http.MethodGet, "/", http.NoBody), fakeClock(250*time.Microsecond))
+
+	if entry["duration_ms"] != 0.25 {
+		t.Errorf("duration_ms = %v, want 0.25 (a 250µs request must not be logged as 0)", entry["duration_ms"])
+	}
+}
+
+func TestAccessLog_HealthChecksAreDebug(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		path      string
+		handler   http.Handler
+		wantLevel string
+	}{
+		{"healthy liveness", "/healthz", ok, "DEBUG"},
+		{"healthy readiness", "/readyz", ok, "DEBUG"},
+		{"api request", "/api/v1/evaluate", ok, "INFO"},
+		{"not ready", "/readyz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeProblem(w, r, Problem{Status: http.StatusServiceUnavailable, Code: CodeNotReady})
+		}), "INFO"},
+		{"wrong method on health", "/healthz", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeProblem(w, r, Problem{Status: http.StatusMethodNotAllowed, Code: CodeMethodNotAllowed})
+		}), "INFO"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			entry := logged(t, tc.handler, httptest.NewRequest(http.MethodGet, tc.path, http.NoBody), time.Now)
+			if entry["level"] != tc.wantLevel {
+				t.Errorf("level = %v, want %s: %v", entry["level"], tc.wantLevel, entry)
+			}
+		})
+	}
+}
+
+func TestAccessLog_ForwardedFor(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("203.0.113.7, ", 30) // 390 bytes
+	tests := []struct {
+		name string
+		hdr  string
+		want any // nil means the attribute is absent
+	}{
+		{"absent", "", nil},
+		{"present", "203.0.113.7, 198.51.100.2", "203.0.113.7, 198.51.100.2"},
+		{"truncated to 256 bytes", long, long[:256]},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req.RemoteAddr = "10.0.0.1:1234"
+			if tc.hdr != "" {
+				req.Header.Set("X-Forwarded-For", tc.hdr)
+			}
+			entry := logged(t, ok, req, time.Now)
+
+			got, present := entry["forwarded_for"]
+			if present != (tc.want != nil) || (present && got != tc.want) {
+				t.Errorf("forwarded_for = %v (present %v), want %v", got, present, tc.want)
+			}
+			if entry["remote_addr"] != "10.0.0.1:1234" {
+				t.Errorf("remote_addr = %v, want the peer address, never the forwarded one", entry["remote_addr"])
+			}
+		})
+	}
+}
+
+func TestAccessLog_TruncatesUserAgent(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("Mozilla/5.0 ", 40) // 480 bytes
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("User-Agent", long)
+
+	entry := logged(t, ok, req, time.Now)
+
+	if entry["user_agent"] != long[:256] {
+		t.Errorf("user_agent = %q, want the first 256 bytes", entry["user_agent"])
 	}
 }
 
 func TestAccessLog_DefaultsToStatusOK(t *testing.T) {
 	t.Parallel()
-	var logs bytes.Buffer
-	h := chain(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("implicit 200"))
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog)
+	})
 
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", http.NoBody))
+	entry := logged(t, h, httptest.NewRequest(http.MethodGet, "/", http.NoBody), time.Now)
 
-	if entry := logLine(t, &logs); entry["status"] != float64(http.StatusOK) || entry["bytes"] != float64(12) {
+	if entry["status"] != float64(http.StatusOK) || entry["bytes"] != float64(12) {
 		t.Errorf("log = %v, want status 200 and 12 bytes", entry)
 	}
 }
 
 func TestAccessLog_ServerErrorsCarryTheProblem(t *testing.T) {
 	t.Parallel()
-	var logs bytes.Buffer
-	h := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, r, Problem{Status: http.StatusServiceUnavailable, Code: CodeTimeout, Detail: "The calculation took too long."})
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog)
-
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", http.NoBody))
-
-	entry := logLine(t, &logs)
-	if entry["level"] != "ERROR" || entry["status"] != float64(http.StatusServiceUnavailable) {
-		t.Errorf("log = %v, want ERROR level and status 503", entry)
+	tests := []struct {
+		name      string
+		problem   Problem
+		wantError string
+	}{
+		{"timeout", Problem{Status: http.StatusServiceUnavailable, Code: CodeTimeout, Detail: "The calculation took too long."}, "TIMEOUT: The calculation took too long."},
+		{"internal error", Problem{Status: http.StatusInternalServerError, Code: CodeInternal}, "INTERNAL_ERROR"},
+		{"other 5xx", Problem{Status: http.StatusBadGateway, Code: "UPSTREAM_FAILED", Detail: "no"}, "UPSTREAM_FAILED: no"},
 	}
-	if entry["error"] != "TIMEOUT: The calculation took too long." {
-		t.Errorf("error = %v, want the problem code and detail", entry["error"])
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeProblem(w, r, tc.problem) })
+
+			entry := logged(t, h, httptest.NewRequest(http.MethodPost, "/", http.NoBody), time.Now)
+
+			if entry["level"] != "ERROR" || entry["status"] != float64(tc.problem.Status) {
+				t.Errorf("log = %v, want ERROR level and status %d", entry, tc.problem.Status)
+			}
+			if entry["error"] != tc.wantError || entry["code"] != tc.problem.Code {
+				t.Errorf("error = %v, code = %v; want %q and %q", entry["error"], entry["code"], tc.wantError, tc.problem.Code)
+			}
+		})
 	}
 }
 
-func TestAccessLog_ClientErrorsCarryNoError(t *testing.T) {
+func TestAccessLog_RawServerErrorIsStillAnError(t *testing.T) {
 	t.Parallel()
-	var logs bytes.Buffer
-	h := chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, r, Problem{Status: http.StatusNotFound, Code: CodeNotFound, Detail: "nope"})
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog)
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) })
 
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", http.NoBody))
+	entry := logged(t, h, httptest.NewRequest(http.MethodGet, "/", http.NoBody), time.Now)
 
-	entry := logLine(t, &logs)
-	if _, present := entry["error"]; present || entry["level"] != "INFO" {
-		t.Errorf("log = %v, want INFO without an error attribute", entry)
+	if entry["level"] != "ERROR" || entry["status"] != float64(http.StatusBadGateway) {
+		t.Errorf("log = %v, want ERROR level for a 5xx written without a problem", entry)
+	}
+}
+
+func TestAccessLog_NotReadyIsNotAnError(t *testing.T) {
+	t.Parallel()
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProblem(w, r, Problem{Status: http.StatusServiceUnavailable, Code: CodeNotReady, Detail: "The service is not ready to handle requests."})
+	})
+
+	entry := logged(t, h, httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody), time.Now)
+
+	if entry["level"] != "INFO" || entry["status"] != float64(http.StatusServiceUnavailable) || entry["code"] != CodeNotReady {
+		t.Errorf("log = %v, want INFO with status 503 and code NOT_READY", entry)
+	}
+	if _, present := entry["error"]; present {
+		t.Errorf("a planned 503 NOT_READY logged an error: %v", entry["error"])
+	}
+}
+
+func TestAccessLog_ClientErrorsCarryCodesButNoError(t *testing.T) {
+	t.Parallel()
+	position := 3
+	tests := []struct {
+		name          string
+		problem       Problem
+		wantErrorCode string
+	}{
+		{"not found", Problem{Status: http.StatusNotFound, Code: CodeNotFound, Detail: "nope"}, ""},
+		{"validation failed", Problem{
+			Status: http.StatusBadRequest,
+			Code:   CodeValidationFailed,
+			Detail: "unexpected ')' at character 4",
+			Errors: []FieldError{{Field: "expression", Code: "UNEXPECTED_TOKEN", Position: &position, Message: "unexpected ')' at character 4"}},
+		}, "UNEXPECTED_TOKEN"},
+		{"arithmetic error", Problem{Status: http.StatusUnprocessableEntity, Code: "DIVISION_BY_ZERO", Detail: "Cannot divide by zero."}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeProblem(w, r, tc.problem) })
+
+			entry := logged(t, h, httptest.NewRequest(http.MethodGet, "/", http.NoBody), time.Now)
+
+			if _, present := entry["error"]; present || entry["level"] != "INFO" {
+				t.Errorf("log = %v, want INFO without an error attribute", entry)
+			}
+			if entry["code"] != tc.problem.Code {
+				t.Errorf("code = %v, want %q", entry["code"], tc.problem.Code)
+			}
+			got, present := entry["error_code"]
+			if present != (tc.wantErrorCode != "") || (present && got != tc.wantErrorCode) {
+				t.Errorf("error_code = %v (present %v), want %q", got, present, tc.wantErrorCode)
+			}
+		})
+	}
+}
+
+func TestAccessLog_CancelledRequest(t *testing.T) {
+	t.Parallel()
+	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { stateFrom(r.Context()).setCancelled() })
+
+	entry := logged(t, h, httptest.NewRequest(http.MethodPost, "/", http.NoBody), time.Now)
+
+	// 499 is nginx's status for "client closed request"; it never goes on the wire.
+	if entry["level"] != "INFO" || entry["status"] != float64(statusClientClosedRequest) || entry["cancelled"] != true {
+		t.Errorf("log = %v, want INFO, status 499 and cancelled=true", entry)
+	}
+	if _, present := entry["error"]; present {
+		t.Errorf("a cancelled request logged an error: %v", entry["error"])
+	}
+}
+
+func TestProblem_IsFault(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		p    Problem
+		want bool
+	}{
+		{"validation failed", Problem{Status: http.StatusBadRequest, Code: CodeValidationFailed}, false},
+		{"not found", Problem{Status: http.StatusNotFound, Code: CodeNotFound}, false},
+		{"arithmetic", Problem{Status: http.StatusUnprocessableEntity, Code: "DIVISION_BY_ZERO"}, false},
+		{"not ready", Problem{Status: http.StatusServiceUnavailable, Code: CodeNotReady}, false},
+		{"timeout", Problem{Status: http.StatusServiceUnavailable, Code: CodeTimeout}, true},
+		{"internal", Problem{Status: http.StatusInternalServerError, Code: CodeInternal}, true},
+		{"other 5xx", Problem{Status: http.StatusBadGateway, Code: "UPSTREAM"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.p.isFault(); got != tc.want {
+				t.Errorf("%+v.isFault() = %v, want %v", tc.p, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -199,7 +399,7 @@ func TestRecoverer(t *testing.T) {
 	var logs bytes.Buffer
 	h := chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog, recoverer)
+	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog(time.Now), recoverer)
 
 	rec := serve(h, http.MethodGet, "/")
 
@@ -239,7 +439,7 @@ func TestRecoverer_PanicAfterHeadersIsOnlyLogged(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("partial"))
 		panic("late boom")
-	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog, recoverer)
+	}), requestID(slog.New(slog.NewJSONHandler(&logs, nil))), accessLog(time.Now), recoverer)
 	rec := httptest.NewRecorder()
 	counting := &countingWriter{ResponseWriter: rec}
 
@@ -419,7 +619,12 @@ func TestRequestState_NilSafeWithoutMiddleware(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if state := stateFrom(req.Context()); state != nil {
+	state := stateFrom(req.Context())
+	if state != nil {
 		t.Errorf("stateFrom() = %+v, want nil without the middleware", state)
 	}
+	// Every setter tolerates the missing state.
+	state.setCancelled()
+	state.setError("ignored")
+	state.setProblem(Problem{Code: CodeNotFound})
 }

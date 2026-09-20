@@ -141,8 +141,8 @@ func (n *numbers) negate(d decimal.Decimal) decimal.Decimal {
 	return d.Neg()
 }
 
-// percent computes operand/100, or base*operand/100 when the node is the direct right
-// operand of an additive operator.
+// percent computes operand/100, or base*operand/100 when the evaluator supplies the left
+// operand of an enclosing additive operator (the "%" entry is relative to those).
 func (n *numbers) percent(operand decimal.Decimal, base *decimal.Decimal) (decimal.Decimal, error) {
 	p := operand.Shift(-2)
 	if base != nil {

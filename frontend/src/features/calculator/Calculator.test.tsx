@@ -1,7 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EVALUATE_URL, problemResponse, validationFailed } from '../../test/msw/handlers'
 import { server } from '../../test/msw/server'
 import { renderWithProviders } from '../../test/render'
@@ -523,6 +523,23 @@ describe('<Calculator />', () => {
       expect(screen.queryByText('99')).not.toBeInTheDocument()
     })
 
+    it('leaves the expression alone when Escape is part of an IME composition', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      await expectResult('4')
+
+      fireEvent.keyDown(input(), { key: 'Escape', isComposing: true })
+
+      expect(input()).toHaveValue('2+2')
+      expect(output()).toHaveTextContent('4')
+
+      fireEvent.keyDown(input(), { key: 'Escape' })
+
+      expect(input()).toHaveValue('')
+      expect(output()).toBeEmptyDOMElement()
+    })
+
     it('clears the same way with the C key', async () => {
       const user = userEvent.setup()
       renderWithProviders(<Calculator />)
@@ -539,6 +556,11 @@ describe('<Calculator />', () => {
   })
 
   describe('errors (FR-13)', () => {
+    beforeEach(() => {
+      // Unexpected failures are reported for support; keep the test output quiet.
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    })
+
     it.each([
       { name: 'a network failure', respond: () => HttpResponse.error() },
       { name: 'a 500', respond: () => problemResponse(500, 'INTERNAL_ERROR') },
@@ -752,6 +774,56 @@ describe('<Calculator />', () => {
 
       expect(input()).toHaveValue('7')
       expect(input()).toHaveFocus()
+    })
+
+    it('routes Space and Enter pressed while the result has focus', async () => {
+      const sent = trackRequests()
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      await waitFor(() => {
+        expect(sent).toEqual(['2+2'])
+      })
+      output().focus()
+
+      await user.keyboard(' ')
+
+      expect(input()).toHaveValue('2+2 ')
+      expect(input()).toHaveFocus()
+      expect(input().selectionStart).toBe(4)
+      await waitFor(() => {
+        expect(sent).toEqual(['2+2', '2+2 '])
+      })
+      output().focus()
+
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(input()).toHaveValue('4')
+      })
+      expect(screen.getAllByRole('button', { name: '2+2 = 4' })).toHaveLength(1)
+      expect(sent).toEqual(['2+2', '2+2 ', '2+2 '])
+      expect(input()).toHaveFocus()
+    })
+
+    it('moves focus to the input for a dead key on the background without typing anything', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '12')
+      blurToBody()
+      const prevented: boolean[] = []
+      const observe = (event: KeyboardEvent) => {
+        prevented.push(event.defaultPrevented)
+      }
+      window.addEventListener('keydown', observe)
+
+      await user.keyboard('{Dead}')
+
+      window.removeEventListener('keydown', observe)
+      expect(input()).toHaveValue('12')
+      expect(input()).toHaveFocus()
+      expect(input().selectionStart).toBe(2)
+      expect(prevented).toEqual([false])
     })
 
     it('keeps the Tab order from the input through the result to the keypad', async () => {

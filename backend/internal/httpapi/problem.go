@@ -56,16 +56,29 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p Problem) {
 	body, err := json.Marshal(p)
 	if err != nil { // cannot happen for this type; keep the response well-formed anyway
 		body = []byte(`{"type":"about:blank","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR"}`)
-		p.Status = http.StatusInternalServerError
+		p = Problem{Status: http.StatusInternalServerError, Code: CodeInternal}
 	}
-	if p.Status >= http.StatusInternalServerError {
-		stateFrom(r.Context()).setError(p.summary())
+	state := stateFrom(r.Context())
+	state.setProblem(p)
+	if p.isFault() {
+		state.setError(p.summary())
 	}
 	h := w.Header()
 	h.Set("Content-Type", problemContentType)
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(p.Status)
 	_, _ = w.Write(append(body, '\n'))
+}
+
+// isFault reports whether p describes a failure of the service, which the access log
+// raises at ERROR, rather than a condition the service planned for. Client errors never
+// are; among server errors, NOT_READY is the service refusing traffic on purpose during
+// shutdown. This is the single place that decides which problems count as faults.
+func (p Problem) isFault() bool {
+	if p.Status < http.StatusInternalServerError {
+		return false
+	}
+	return p.Code != CodeNotReady
 }
 
 // summary is the one-line form used in the access log for server errors.

@@ -46,9 +46,12 @@ function readBlock(css: string): Record<string, string> {
   return block
 }
 
+/** The dark palette applies on screen only, so print always gets the light one. */
+const DARK_BLOCK = /@media screen and \(prefers-color-scheme: dark\)\s*{([\s\S]*?)}\s*}/
+
 function themes(): { name: string; colours: Record<string, string> }[] {
-  const dark = /@media \(prefers-color-scheme: dark\)\s*{([\s\S]*?)}\s*}/.exec(tokens)
-  if (!dark?.[1]) throw new Error('tokens.css has no dark block')
+  const dark = DARK_BLOCK.exec(tokens)
+  if (!dark?.[1]) throw new Error('tokens.css has no screen-only dark block')
   const light = tokens.slice(0, dark.index)
   return [
     { name: 'light', colours: readBlock(light) },
@@ -68,6 +71,13 @@ const TEXT_PAIRS: [foreground: string, background: string][] = [
 ]
 
 describe('design tokens (UI-6)', () => {
+  it('force the light colour scheme when printing without repeating the palette', () => {
+    const print = /@media print\s*{\s*:root\s*{([\s\S]*?)}\s*}/.exec(tokens)
+    if (!print?.[1]) throw new Error('tokens.css has no print block')
+    expect(print[1]).toMatch(/color-scheme:\s*light\s*;/)
+    expect(readBlock(print[1])).toEqual({})
+  })
+
   it('define every colour the pairs need in both themes', () => {
     for (const theme of themes()) {
       for (const pair of TEXT_PAIRS) {

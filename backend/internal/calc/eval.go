@@ -47,8 +47,9 @@ func (p *postfixNode) eval(ctx context.Context, ev *evaluator) (decimal.Decimal,
 	return p.evalWithBase(ctx, ev, nil)
 }
 
-// evalWithBase evaluates the postfix node, passing the enclosing additive operator's left
-// operand when this node is its direct right operand.
+// evalWithBase evaluates the postfix node, passing the enclosing binary operator's left
+// operand when this node is its direct right operand and its entry is relative to that
+// operator (see operator.relativeTo).
 func (p *postfixNode) evalWithBase(ctx context.Context, ev *evaluator, base *decimal.Decimal) (decimal.Decimal, error) {
 	operand, err := ev.eval(ctx, p.operand)
 	if err != nil {
@@ -70,10 +71,10 @@ func (b *binaryNode) eval(ctx context.Context, ev *evaluator) (decimal.Decimal, 
 }
 
 // evalRight evaluates the right operand. A postfix node that is the direct right operand
-// of an operator flagged percentRelativeRight receives the left value as its base; a
+// and whose entry is relative to this operator receives the left value as its base; a
 // group, a unary minus or any other node in between breaks that directness.
 func (b *binaryNode) evalRight(ctx context.Context, ev *evaluator, left decimal.Decimal) (decimal.Decimal, error) {
-	if postfix, ok := b.right.(*postfixNode); ok && b.op.percentRelativeRight {
+	if postfix, ok := b.right.(*postfixNode); ok && postfix.op.isRelativeTo(b.op) {
 		if err := ctx.Err(); err != nil {
 			return decimal.Zero, err
 		}

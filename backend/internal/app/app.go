@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"github.com/aksh/calculator/backend/internal/calc"
 	"github.com/aksh/calculator/backend/internal/config"
 	"github.com/aksh/calculator/backend/internal/httpapi"
 )
@@ -25,8 +26,14 @@ type App struct {
 	shuttingDown atomic.Bool
 }
 
-// New wires evaluator into the HTTP layer according to cfg.
-func New(cfg config.Config, logger *slog.Logger, evaluator httpapi.Evaluator) *App {
+// New builds the calculator domain and wires it into the HTTP layer according to cfg.
+func New(cfg config.Config, logger *slog.Logger) *App {
+	return NewWithEvaluator(cfg, logger, calc.New())
+}
+
+// NewWithEvaluator wires evaluator into the HTTP layer according to cfg. Tests use it to
+// substitute the domain; production code uses New.
+func NewWithEvaluator(cfg config.Config, logger *slog.Logger, evaluator httpapi.Evaluator) *App {
 	a := &App{}
 	a.Handler = httpapi.NewRouter(httpapi.Deps{
 		Logger:         logger,

@@ -770,6 +770,13 @@ func TestOperatorTable(t *testing.T) {
 		binary:     (*numbers).concatDigits,
 	})
 	ops.register(&operator{
+		symbol:     "@",
+		kind:       kindBinary,
+		precedence: precedenceAdditive,
+		assoc:      assocLeft,
+		binary:     (*numbers).concatDigits,
+	})
+	ops.register(&operator{
 		symbol:     "!",
 		kind:       kindPostfix,
 		precedence: precedencePostfix,
@@ -797,6 +804,12 @@ func TestOperatorTable(t *testing.T) {
 		{"cube(2)!", "cube(2)!", "16"},
 		{"cube(", "", ""},
 		{"1#cube(2)", "1#cube(2)", "18"},
+		// The percent entry owns its relative rule: any additive-precedence binary operator
+		// gets "base*right/100" as its direct right operand, a multiplicative one does not.
+		{"200@10%", "200@10%", "2020"},
+		{"200#10%", "200#10%", "2000.1"},
+		{"200@(10%)", "200@(10%)", "2000.1"},
+		{"200@10!", "200@10!", "2020"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
