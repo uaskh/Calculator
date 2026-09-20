@@ -1,0 +1,41 @@
+# Netlify hosts the built frontend and proxies /api/* to the Go API on Render, so the
+# browser stays on one origin and CORS stays off. See docs/deployment.md.
+
+[build]
+  base    = "frontend"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "26.8"
+
+# Same-origin API: Netlify fetches these from Render on the browser's behalf.
+# Rules apply in order, so this one must stay above the SPA fallback.
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://calculator-cy05.onrender.com/api/:splat"
+  status = 200
+  force  = true
+
+# Single-page app: every other path serves the shell.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# The same security headers nginx sends in the container setup.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options     = "nosniff"
+    X-Frame-Options            = "DENY"
+    Referrer-Policy            = "no-referrer"
+    Permissions-Policy         = "camera=(), microphone=(), geolocation=()"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Content-Security-Policy    = "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+# Fingerprinted build assets never change.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

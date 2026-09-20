@@ -82,8 +82,9 @@ Every push to `main` redeploys automatically ("Auto-Deploy" is on by default).
 
 ## Step 2: add the Netlify configuration to the repository
 
-Netlify reads a `netlify.toml` at the repository root. Create it with the Render address
-from step 1 (this is the only place that address appears):
+Netlify reads `netlify.toml` at the repository root. The committed file points at
+`https://calculator-cy05.onrender.com`; if your Render service has a different address,
+change the `to` line of the `/api/*` rule (the only place the address appears):
 
 ```toml
 [build]
@@ -91,10 +92,13 @@ from step 1 (this is the only place that address appears):
   command = "npm ci && npm run build"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION = "26.8"
+
 # Same-origin API: Netlify fetches these from Render on the browser's behalf.
 [[redirects]]
   from   = "/api/*"
-  to     = "https://<your-service>.onrender.com/api/:splat"
+  to     = "https://calculator-cy05.onrender.com/api/:splat"
   status = 200
   force  = true
 
@@ -121,13 +125,7 @@ from step 1 (this is the only place that address appears):
     Cache-Control = "public, max-age=31536000, immutable"
 ```
 
-Commit and push it:
-
-```bash
-git add netlify.toml
-git commit -m "chore(deploy): add Netlify configuration"
-git push
-```
+The file is committed; after any change to it, commit and push.
 
 Notes:
 
@@ -143,8 +141,8 @@ Notes:
 3. Netlify reads `netlify.toml`, so the build settings are already filled in
    (base `frontend`, command `npm ci && npm run build`, publish `frontend/dist`). Confirm
    they match and click **Deploy**.
-4. Under **Site configuration → Environment variables** add `NODE_VERSION` = `26.8`
-   (the value in `.nvmrc`) so the build uses the same Node as the repository.
+4. `netlify.toml` already pins `NODE_VERSION` to `26.8` (the value in `.nvmrc`), so the
+   build uses the same Node as the repository; nothing to set in the dashboard.
 5. The first build takes one to two minutes. Open the `https://<site>.netlify.app`
    address, type `2+3*4` and check that `14` appears: that request went browser → Netlify
    → Render → back.
