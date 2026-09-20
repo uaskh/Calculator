@@ -95,28 +95,46 @@ Makefile                     every developer task (make help)
 
 ## Getting started
 
-### Prerequisites
+### Run it with one command (Docker only)
+
+The only requirement is Docker with Compose v2 (Docker Desktop on macOS or Windows,
+Docker Engine on Linux). Go, Node.js and npm are not needed on your machine: the images
+build everything inside containers.
+
+```bash
+git clone https://github.com/<your-user>/calculator.git
+cd calculator
+docker compose up --build --wait
+```
+
+Then open <http://localhost:3000>. The API is also published on
+<http://localhost:8080> so the `curl` examples below work as written.
+
+The command builds both images (two to four minutes the first time, seconds afterwards),
+starts the API, waits for its health check, then starts the web container and waits for
+nginx. It works the same in a macOS or Linux terminal, in Windows PowerShell and in
+Git Bash. To stop and remove the containers:
+
+```bash
+docker compose down
+```
+
+`make docker-up` and `make docker-down` are shorthands for the same two commands on
+systems that have `make`.
+
+To put the app on the public internet at no cost, follow
+[docs/deployment.md](docs/deployment.md) (Render for the API, Netlify for the web app);
+that path needs no local toolchain either.
+
+### Developer toolchain (only for changing the code)
 
 | Tool          | Version                    | Needed for                 |
 | ------------- | -------------------------- | -------------------------- |
 | Go            | ≥ 1.27 (`backend/go.mod`)  | backend                    |
 | Node.js / npm | ≥ 26.8 / 11 (see `.nvmrc`) | frontend                   |
-| Docker        | recent, with Compose v2    | containers (optional)      |
+| Docker        | recent, with Compose v2    | containers                 |
 | golangci-lint | v2.13 (optional)           | `make lint`, `make verify` |
-
-### Quick start with Docker
-
-To put the app on the public internet at no cost, follow
-[docs/deployment.md](docs/deployment.md) (Render for the API, Netlify for the web app).
-
-```bash
-make docker-up        # web on http://localhost:3000, API on http://localhost:8080
-make docker-down
-```
-
-`make docker-up` builds both images, starts the API (published on 8080) and the web
-container (nginx on 3000), and waits for the health checks. Open
-<http://localhost:3000>.
+| GNU Make      | 3.81 or newer              | the `make` targets below   |
 
 ### Local development
 
@@ -714,7 +732,10 @@ Possible next steps:
 | `address already in use` on 8080, 5173 or 3000                            | Find the process (`lsof -i :8080`) and stop it, or set `HTTP_ADDR` for the API; Vite and the containers use fixed ports                            |
 | Playwright cannot find a browser                                          | `cd frontend && npx playwright install chromium` (also done by `make setup`)                                                                       |
 | `make lint` fails with `golangci-lint: command not found`                 | Install golangci-lint v2 (`brew install golangci-lint`)                                                                                            |
-| `make docker-up` fails with `Cannot connect to the Docker daemon`         | Start Docker Desktop, confirm with `docker info`, retry                                                                                            |
+| `docker compose up` fails with `Cannot connect to the Docker daemon`      | Start Docker Desktop (or the Docker service on Linux), confirm with `docker info`, retry                                                           |
+| `docker compose` is "not a docker command"                                | Install Compose v2 (bundled with Docker Desktop; on Linux `docker-compose-plugin`); the old `docker-compose` v1 binary is not supported            |
+| `make: command not found` (Windows, or macOS without command-line tools)  | Use the plain commands: `docker compose up --build --wait` and `docker compose down`; `make` is only needed for the developer targets              |
+| First `docker compose up` fails while downloading images or packages      | The first build needs internet access to pull the base images, the Go module and npm packages; rerun once the connection is back                   |
 | 502 from `/api/` on http://localhost:3000 after rebuilding only `backend` | nginx resolves the `backend` hostname once at startup; restart the web container (`docker compose restart web`) or use `make docker-up` for both   |
 | 413 `PAYLOAD_TOO_LARGE` for an expression shorter than 1,024 characters   | Non-ASCII characters take several bytes each; the 4 KiB body limit applies before the length check. Such characters are `INVALID_CHARACTER` anyway |
 | `make coverage` fails on the benchmark limit on a slow machine            | Raise the limit for the local run (`make coverage BENCH_MAX_MS=10`); CI keeps 5 ms                                                                 |
