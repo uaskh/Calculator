@@ -109,7 +109,6 @@ Makefile                     every developer task (make help)
 To put the app on the public internet at no cost, follow
 [docs/deployment.md](docs/deployment.md) (Render for the API, Netlify for the web app).
 
-
 ```bash
 make docker-up        # web on http://localhost:3000, API on http://localhost:8080
 make docker-down
