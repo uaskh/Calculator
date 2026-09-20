@@ -155,12 +155,39 @@ func TestCanonical(t *testing.T) {
 		{"-0.00000000000000004", "0"},
 		{"-0.00000000000000005", "-0.0000000000000001"},
 		{"1267650600228229401496703205376", "1267650600228229401496703205376"},
+		{strings.Repeat("9", 100) + "." + strings.Repeat("9", 16), strings.Repeat("9", 100) + "." + strings.Repeat("9", 16)},
+		{strings.Repeat("9", 100) + "." + strings.Repeat("9", 16) + "4", strings.Repeat("9", 100) + "." + strings.Repeat("9", 16)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.value, func(t *testing.T) {
 			t.Parallel()
-			if got := num.canonical(mustDecimal(t, tc.value)); got != tc.want {
+			got, err := num.canonical(mustDecimal(t, tc.value))
+			if err != nil {
+				t.Fatalf("canonical(%s) returned error %v", tc.value, err)
+			}
+			if got != tc.want {
 				t.Errorf("canonical(%s) = %q, want %q", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCanonical_RoundsIntoMagnitudeCap proves the final 16-place rounding is checked
+// against the cap: a value below 10^100 that rounds up to it is RESULT_TOO_LARGE.
+func TestCanonical_RoundsIntoMagnitudeCap(t *testing.T) {
+	t.Parallel()
+
+	num := newNumbers()
+	for _, value := range []string{
+		strings.Repeat("9", 100) + "." + strings.Repeat("9", 17),
+		"-" + strings.Repeat("9", 100) + "." + strings.Repeat("9", 16) + "5",
+	} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			got, err := num.canonical(mustDecimal(t, value))
+			var aerr *ArithmeticError
+			if !errors.As(err, &aerr) || aerr.Code != CodeResultTooLarge {
+				t.Fatalf("canonical(%s) = %q, %v, want %s", value, got, err, CodeResultTooLarge)
 			}
 		})
 	}
@@ -184,7 +211,12 @@ func TestFractionalPower_MatchesSquareRoot(t *testing.T) {
 	num := newNumbers()
 	half := mustDecimal(t, "0.5")
 	quarter := mustDecimal(t, "0.25")
-	for _, base := range []string{"2", "3", "10", "0.5", "0.001", "123456.789", "1.0001", "99", "1" + strings.Repeat("0", 60), "0." + strings.Repeat("0", 20) + "7"} {
+	bases := []string{
+		"2", "3", "10", "0.5", "0.001", "123456.789", "1.0001", "99",
+		"1" + strings.Repeat("0", 60), "1" + strings.Repeat("0", 90), "1" + strings.Repeat("0", 99),
+		"0." + strings.Repeat("0", 20) + "7",
+	}
+	for _, base := range bases {
 		t.Run(base, func(t *testing.T) {
 			t.Parallel()
 			x := mustDecimal(t, base)
@@ -241,16 +273,24 @@ func TestFractionalPower_MatchesLibrary(t *testing.T) {
 	}
 }
 
+// productionFixedPoint returns the fixed-point context with the configuration numbers uses.
+func productionFixedPoint() *fixedPoint {
+	return newFixedPoint(MaxIntegerDigits + IntermediatePlaces)
+}
+
 func TestFixedPoint_Ln2(t *testing.T) {
 	t.Parallel()
 
-	// ln 2 = 0.693147180559945309417232121458176568075500134360255254120680009493393621969694715605863326996418687...
+	// ln 2 = 0.693147180559945309417232121458176568075500134360255254120680009493393621969694715605863326996418687542...
 	const ln2 = "0.6931471805599453094172321214581765680755001343602552541206800094933936219696947156058633269964186875"
-	fp := newFixedPoint(guardPlaces)
-	got := fp.toDecimal(fp.ln2).Truncate(guardPlaces).String()
-	want := mustDecimal(t, ln2).Truncate(guardPlaces).String()
-	if got != want {
-		t.Errorf("ln2 = %s, want %s", got, want)
+	const knownPlaces = int32(len(ln2) - 2)
+	fp := productionFixedPoint()
+	if fp.places <= knownPlaces {
+		t.Fatalf("fixed point works with %d places, want more than the %d known digits of ln 2", fp.places, knownPlaces)
+	}
+	got := fp.toDecimal(fp.ln2).Truncate(knownPlaces).String()
+	if got != ln2 {
+		t.Errorf("ln2 = %s, want %s", got, ln2)
 	}
 	if got := fp.toDecimal(fp.exp(fp.ln2)).Round(IntermediatePlaces).String(); got != "2" {
 		t.Errorf("exp(ln 2) = %s, want 2", got)
@@ -267,15 +307,50 @@ func TestFixedPoint_Ln2(t *testing.T) {
 	}
 }
 
+// TestFixedPoint_Exp checks exp against values computed independently (Python decimal at
+// 400 digits), rounded to 32 places: both signs of the 2^k split, a small argument that
+// needs no split, and the largest argument pow can produce (ln 10^100 = 230.26).
+func TestFixedPoint_Exp(t *testing.T) {
+	t.Parallel()
+
+	fp := productionFixedPoint()
+	cases := []struct{ arg, want string }{
+		{"1", "2.71828182845904523536028747135266"},
+		{"-1", "0.36787944117144232159552377016146"},
+		{"10", "22026.46579480671651695790064528424437"},
+		{"0.3", "1.34985880757600310398374431332801"},
+		{"230.25", "9915268022112193113739658471051846694218112679960420565817010409757919871841610196484460056223539119.81457846279824367426611945368732"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.arg, func(t *testing.T) {
+			t.Parallel()
+			got := fp.toDecimal(fp.exp(fp.fromDecimal(mustDecimal(t, tc.arg)))).Round(IntermediatePlaces).String()
+			if got != tc.want {
+				t.Errorf("exp(%s) = %s, want %s", tc.arg, got, tc.want)
+			}
+		})
+	}
+	// e^-74 = 7.28e-33 sits below the intermediate scale (k = -107 bits): the fixed point
+	// still holds its digits, and the 32-place rounding lifts it to one unit.
+	small := fp.toDecimal(fp.exp(fp.fromDecimal(mustDecimal(t, "-74"))))
+	if got, want := small.Truncate(45).String(), "0."+strings.Repeat("0", 32)+"7281290178321"; got != want {
+		t.Errorf("exp(-74) = %s, want %s", got, want)
+	}
+	if got, want := small.Round(IntermediatePlaces).String(), "0."+strings.Repeat("0", 31)+"1"; got != want {
+		t.Errorf("exp(-74) rounded to 32 places = %s, want %s", got, want)
+	}
+}
+
 func TestFixedPoint_FromDecimal(t *testing.T) {
 	t.Parallel()
 
-	fp := newFixedPoint(guardPlaces)
+	fp := productionFixedPoint()
 	cases := []struct{ value, want string }{
 		{"-1.5", "-1.5"},
 		{"0.25", "0.25"},
 		{"0", "0"},
-		{"-0." + strings.Repeat("0", 100) + "1", "0"}, // beyond the working scale: truncated
+		{"-0." + strings.Repeat("0", int(fp.places)) + "1", "0"}, // beyond the working scale: truncated
+		{"0." + strings.Repeat("0", int(fp.places)-1) + "1", "0." + strings.Repeat("0", int(fp.places)-1) + "1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.value, func(t *testing.T) {

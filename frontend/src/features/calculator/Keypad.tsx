@@ -50,7 +50,7 @@ const KEYS: readonly KeyDefinition[] = [
   key('.', 'decimal point', '.'),
   key('%', 'percent', '%'),
   key('+', 'add', '+'),
-  key('sqrt', 'square root', 'sqrt'),
+  key('sqrt', 'sqrt, square root', 'sqrt'),
   key('^', 'power', '^'),
   { label: '=', name: 'equals', action: 'submit' },
 ]

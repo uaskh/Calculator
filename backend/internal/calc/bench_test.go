@@ -37,6 +37,7 @@ func benchmarkCorpus() []benchmarkCase {
 		{name: "largest_integer_power_2^332", input: "2^332", value: bigPow(2, 332)},
 		{name: "pow_99^50", input: "99^50", value: bigPow(99, 50)},
 		{name: "pow_9^999.5", input: "9^999.5", code: CodeResultTooLarge},
+		{name: "pow_large_fractional_(10^99)^0.999", input: "(10^99)^0.999", value: "796159350417318744185341970687172307579007314201602764575008496413321708599304314072090503021624071.6058243083988372"},
 	}
 }
 

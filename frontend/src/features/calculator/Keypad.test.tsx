@@ -47,7 +47,7 @@ describe('<Keypad />', () => {
       'decimal point',
       'percent',
       'add',
-      'square root',
+      'sqrt, square root',
       'power',
       'equals',
     ])
@@ -60,7 +60,7 @@ describe('<Keypad />', () => {
     expect(screen.getByRole('button', { name: 'multiply' })).toHaveTextContent('×')
     expect(screen.getByRole('button', { name: 'subtract' })).toHaveTextContent('−')
     expect(screen.getByRole('button', { name: 'backspace' })).toHaveTextContent('⌫')
-    expect(screen.getByRole('button', { name: 'square root' })).toHaveTextContent('sqrt')
+    expect(screen.getByRole('button', { name: 'sqrt, square root' })).toHaveTextContent('sqrt')
     expect(screen.getByRole('button', { name: 'equals' })).toHaveTextContent('=')
   })
 
@@ -90,7 +90,7 @@ describe('<Keypad />', () => {
     }
     await user.click(screen.getByRole('button', { name: 'divide' }))
     await user.click(screen.getByRole('button', { name: 'subtract' }))
-    await user.click(screen.getByRole('button', { name: 'square root' }))
+    await user.click(screen.getByRole('button', { name: 'sqrt, square root' }))
     await user.click(screen.getByRole('button', { name: 'power' }))
     await user.click(screen.getByRole('button', { name: 'percent' }))
     await user.click(screen.getByRole('button', { name: 'decimal point' }))

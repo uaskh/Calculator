@@ -113,8 +113,9 @@ func (h evaluateHandler) writeEvaluateError(w http.ResponseWriter, r *http.Reque
 			Detail: "The calculation took too long.",
 		})
 	case errors.Is(err, context.Canceled):
-		// The client went away; nobody is listening for a body.
-		loggerFrom(ctx).DebugContext(ctx, "client cancelled evaluation")
+		// The client went away; nobody is listening for a body. Mark the request so the
+		// access log does not count it as a successful 200 (live previews abort often).
+		stateFrom(ctx).setError("request cancelled by the client")
 	default:
 		loggerFrom(ctx).ErrorContext(ctx, "evaluate expression", "error", err)
 		writeProblem(w, r, Problem{Status: http.StatusInternalServerError, Code: CodeInternal})

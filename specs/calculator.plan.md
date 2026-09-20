@@ -63,7 +63,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | FR-9.5 | UI | No live request after a commit until the input changes (§4, D21) | After `=`, no POST until an edit | Must | `Calculator.test.tsx › committed` |
 | FR-9.6 | UI | Previous result stays; "Calculating…" only after 300 ms without response (§4, §7) | Response at 200 ms → never replaced; at 400 ms → `Calculating…` from 300 ms until it arrives | Must | `useCalculator.test.ts › slow` |
 | FR-9.7 | UI | "Evaluated as …" only on 200 with differing `expression`; hidden on error and after commit (§4, §7) | `2*(3+4`→`Evaluated as 2*(3+4)`; `  2+2 `→hidden; after error or `=`→hidden | Must | `Calculator.test.tsx › evaluated as` |
-| FR-10.1 | UI | Keypad layout, labels, `=` is `type=submit` spanning two columns (§7) | 23 buttons in spec order; aria-labels: clear, backspace, open parenthesis, close parenthesis, divide, multiply, subtract, add, decimal point, percent, square root, power, equals | Must | `Keypad.test.tsx › layout` |
+| FR-10.1 | UI | Keypad layout, labels, `=` is `type=submit` spanning two columns (§7) | 23 buttons in spec order; aria-labels: clear, backspace, open parenthesis, close parenthesis, divide, multiply, subtract, add, decimal point, percent, "sqrt, square root", power, equals | Must | `Keypad.test.tsx › layout` |
 | FR-10.2 | UI | Taps append ASCII tokens; `sqrt` inserts `sqrt(` (§4) | `7 × ( 2 + 1 )`→`7*(2+1)`, live `21`; `sqrt 1 6 )`→`sqrt(16)`, `4` | Must | `Calculator.test.tsx › keypad` |
 | FR-10.3 | UI | Keys append at the end, caret at end, focus stays on input (§7) | Caret at 0 in `12`, tap `3`→`123`, caret 3, input focused | Must | `Calculator.test.tsx › keypad focus` |
 | FR-10.4 | UI | Insert exceeding 1,024 characters ignored (§7) | 1,020 chars + `sqrt`→unchanged; 1,023 + `1`→1,024; then `1`→unchanged | Must | `model.test.ts › insertKey` |
@@ -133,7 +133,8 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | D-5 | Body limit and handler timeout | Environment variables `HTTP_MAX_BODY_BYTES=4096`, `HTTP_REQUEST_TIMEOUT=5s`, documented in the README config table (user, 2026-09-18) | Config tests cover both; README lists them with the other limits |
 | D-6 | Docker | User installs Docker before Phase 6; compose smoke test runs locally then (user, 2026-09-18) | Phase 6 blocks on `docker compose` availability |
 | D-7 | `docs/prompts.md` | The `/spec` prompt is pasted by the user in Phase 7; `/implement` invocation recorded now (user, 2026-09-18) | Phase 7 asks for the text |
-| D-9 | Fractional exponent implementation | In-package fixed-point `exp(f·ln x)` on `math/big` (88 places) replaces `PowWithPrecision`, which has a verified data race and a `float64` seed; spec §5 and decision 35 amended (user, 2026-09-18) | A-14's fractional step changes; number-representation ADR documents the race |
+| D-9 | Fractional exponent implementation | In-package fixed-point `exp(f·ln x)` on `math/big` (172 places: 100 integer digits + 32 places + 40 guard, exact `2^k` split; review finding R-1 widened it from 88) replaces `PowWithPrecision`, which has a verified data race and a `float64` seed; spec §5 and decision 35 amended (user, 2026-09-18) | A-14's fractional step changes; number-representation ADR documents the race |
+| D-10 | `sqrt` key accessible name | `"sqrt, square root"` so the visible label is contained in the accessible name (WCAG 2.5.3); spec §7 decision 36 (user, 2026-09-19) | Keypad, unit test, Playwright helper and spec updated |
 | D-8 | Branch | `master` renamed to `main`; CI triggers on `main` and pull requests (user, 2026-09-18) | Matches the template workflow |
 
 | ID | Assumption | Why it is safe to assume |

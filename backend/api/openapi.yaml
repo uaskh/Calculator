@@ -152,6 +152,10 @@ paths:
           $ref: "#/components/responses/UnsupportedMediaType"
         "422":
           $ref: "#/components/responses/ArithmeticError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -178,6 +182,8 @@ paths:
                 $ref: "#/components/schemas/Status"
               example:
                 status: ok
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
   /readyz:
     get:
       operationId: getReadiness
@@ -202,6 +208,8 @@ paths:
                 $ref: "#/components/schemas/Status"
               example:
                 status: ok
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
         "503":
           $ref: "#/components/responses/NotReady"
 components:
@@ -256,8 +264,11 @@ components:
       properties:
         expression:
           type: string
-          description: The expression that was evaluated, after normalization.
-          maxLength: 1024
+          description: >-
+            The expression that was evaluated, after normalization. Closing parentheses
+            appended for unmatched "(" can make it up to 32 characters longer than the
+            1,024-character input limit.
+          maxLength: 1056
         result:
           type: string
           description: >-
@@ -437,17 +448,6 @@ components:
             detail:
               const: The calculation took too long.
   responses:
-    BadRequest:
-      description: Malformed JSON, wrong types, unknown or missing fields, invalid values.
-      headers:
-        X-Request-ID:
-          $ref: "#/components/headers/RequestId"
-        Cache-Control:
-          $ref: "#/components/headers/CacheControl"
-      content:
-        application/problem+json:
-          schema:
-            $ref: "#/components/schemas/Problem"
     NotFound:
       description: No resource matches the path (`NOT_FOUND`).
       headers:

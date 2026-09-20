@@ -7,6 +7,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"path"
+	"strings"
 	"time"
 )
 
@@ -46,11 +48,13 @@ func NewRouter(d Deps) http.Handler {
 }
 
 // problemMux serves the mux, replacing its plain-text 404/405 replies with problem details
-// (keeping the Allow header).
+// (keeping the Allow header). It also refuses paths that are not in canonical form
+// ("//api/v1/evaluate", "/a/../b"): http.ServeMux would answer those with a 307 redirect,
+// which a JSON API must not do and which would lack the contract's headers.
 type problemMux struct{ mux *http.ServeMux }
 
 func (p problemMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if _, pattern := p.mux.Handler(r); pattern != "" {
+	if _, pattern := p.mux.Handler(r); pattern != "" && isCanonicalPath(r.URL.Path) {
 		p.mux.ServeHTTP(w, r)
 		return
 	}
@@ -70,6 +74,19 @@ func (p problemMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Code:   CodeNotFound,
 		Detail: "No resource matches this path.",
 	})
+}
+
+// isCanonicalPath reports whether p is already what path.Clean would produce (keeping a
+// trailing slash), so that the mux serves it directly instead of redirecting.
+func isCanonicalPath(p string) bool {
+	if p == "" {
+		return false
+	}
+	cleaned := path.Clean(p)
+	if strings.HasSuffix(p, "/") && cleaned != "/" {
+		cleaned += "/"
+	}
+	return cleaned == p
 }
 
 // headerOnlyWriter records the status and headers of a response and discards its body.

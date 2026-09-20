@@ -112,7 +112,7 @@ test.describe('keypad', () => {
     expect(await calculator.caretAtEnd()).toBe(true)
 
     await calculator.tap('clear')
-    for (const name of ['square root', '1', '6', 'close parenthesis'] as const) {
+    for (const name of ['sqrt, square root', '1', '6', 'close parenthesis'] as const) {
       await calculator.tap(name)
     }
     await expect(calculator.input).toHaveValue('sqrt(16)')
@@ -139,7 +139,7 @@ test.describe('keypad', () => {
     await expect(calculator.input).toHaveValue('12+')
 
     await calculator.tap('clear')
-    await calculator.tap('square root')
+    await calculator.tap('sqrt, square root')
     await expect(calculator.input).toHaveValue('sqrt(')
     await calculator.tap('backspace')
     await expect(calculator.input).toHaveValue('sqrt')

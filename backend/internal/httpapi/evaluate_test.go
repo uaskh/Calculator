@@ -364,8 +364,9 @@ func TestEvaluate_ClientCancellationWritesNothing(t *testing.T) {
 	if rec.Body.Len() != 0 {
 		t.Errorf("body written for a cancelled request: %s", rec.Body)
 	}
-	if !strings.Contains(logs.String(), "client cancelled") {
-		t.Errorf("cancellation was not logged: %s", logs.String())
+	// The access log must not count an aborted live preview as a successful request.
+	if !strings.Contains(logs.String(), `"error":"request cancelled by the client"`) {
+		t.Errorf("cancellation is missing from the access log: %s", logs.String())
 	}
 }
 

@@ -78,8 +78,7 @@ func TestServe_GracefulShutdownDrainsInFlightRequests(t *testing.T) {
 	}()
 
 	<-started
-	cancel()                          // begin shutdown while the request is in flight
-	time.Sleep(50 * time.Millisecond) // give Shutdown time to close the listener
+	cancel() // begin shutdown while the request is in flight
 	close(release)
 	wg.Wait()
 

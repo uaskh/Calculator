@@ -101,6 +101,26 @@ func TestRouter_NotFound(t *testing.T) {
 	assertCommonHeaders(t, rec.Header())
 }
 
+func TestRouter_NonCanonicalPathIsNotFound(t *testing.T) {
+	t.Parallel()
+	// http.ServeMux would redirect these with a 307; a JSON API answers with a problem
+	// document that carries the contract's headers instead.
+	for _, target := range []string{"//api/v1/evaluate", "/api/v1/../api/v1/evaluate", "/healthz/./"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			rec := serve(NewRouter(testDeps()), http.MethodPost, target)
+
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404; Location = %q", rec.Code, rec.Header().Get("Location"))
+			}
+			if p := decodeProblemBody(t, rec); p.Code != CodeNotFound {
+				t.Errorf("code = %q, want %s", p.Code, CodeNotFound)
+			}
+			assertCommonHeaders(t, rec.Header())
+		})
+	}
+}
+
 func TestRouter_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 	rec := serve(NewRouter(testDeps()), http.MethodPost, "/healthz")

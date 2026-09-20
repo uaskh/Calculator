@@ -202,6 +202,12 @@ describe('messageFor', () => {
       name: 'a 400 VALIDATION_FAILED with an empty errors list',
       error: httpError(400, 'VALIDATION_FAILED', { errors: [] }),
     },
+    {
+      name: 'a 400 VALIDATION_FAILED whose message is empty',
+      error: httpError(400, 'VALIDATION_FAILED', {
+        errors: [{ field: 'expression', code: 'EMPTY', message: '' }],
+      }),
+    },
     { name: 'an invalid response', error: new ApiError('invalid-response', 'x') },
     { name: 'an aborted request', error: new ApiError('aborted', 'x') },
   ])('falls back to the generic message for $name (FR-13.3)', ({ error }) => {

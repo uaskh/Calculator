@@ -29,7 +29,7 @@ export const KEYPAD_NAMES = [
   'decimal point',
   'percent',
   'add',
-  'square root',
+  'sqrt, square root',
   'power',
   'equals',
 ] as const

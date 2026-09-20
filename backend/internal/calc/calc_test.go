@@ -197,6 +197,15 @@ func TestEvaluate(t *testing.T) {
 			{"2^1.5", "2.8284271247461901"},
 			{"1^0.5", "1"},
 			{"2^0.25", "1.1892071150027211"},
+			{"(10^80)^0.9", "1" + strings.Repeat("0", 72)},
+			{"(10^90)^0.9", "1" + strings.Repeat("0", 81)},
+			{"(10^99)^0.9", "125892541179416721042395410639580060609361740946693106910792301952664761578250202412105096.6275946170388691"},
+			{"(10^99)^0.999", "796159350417318744185341970687172307579007314201602764575008496413321708599304314072090503021624071.6058243083988372"},
+		},
+		"final_rounding": {
+			{strings.Repeat("9", 100) + "+0.9999999999999999", strings.Repeat("9", 100) + "." + strings.Repeat("9", 16)},
+			{strings.Repeat("9", 100) + "+0.99999999999999994", strings.Repeat("9", 100) + "." + strings.Repeat("9", 16)},
+			{"-" + strings.Repeat("9", 100) + "-0.9999999999999999", "-" + strings.Repeat("9", 100) + "." + strings.Repeat("9", 16)},
 		},
 		"sqrt": {
 			{"sqrt(16)", "4"},
@@ -643,6 +652,9 @@ func TestArithmeticErrors(t *testing.T) {
 			{"0.1^-100", CodeResultTooLarge},
 			{"(1" + strings.Repeat("0", 100) + ".5)", CodeResultTooLarge},
 			{"1" + strings.Repeat("0", 100) + " ", CodeResultTooLarge},
+			{strings.Repeat("9", 100) + "+0.99999999999999999", CodeResultTooLarge},
+			{strings.Repeat("9", 100) + "+0.99999999999999995", CodeResultTooLarge},
+			{"-" + strings.Repeat("9", 100) + "-0.99999999999999999", CodeResultTooLarge},
 		},
 		"order": {
 			{"(-8)^1001.5", CodeExponentTooLarge},
@@ -668,6 +680,29 @@ func TestArithmeticErrors(t *testing.T) {
 					t.Parallel()
 					wantArithmetic(t, tc.input, tc.code)
 				})
+			}
+		})
+	}
+}
+
+// TestFractionalPower_HalfMatchesSquareRoot proves x^0.5 and sqrt(x) agree on the largest
+// bases the calculator accepts, where the exp/ln path used to lose significant digits.
+func TestFractionalPower_HalfMatchesSquareRoot(t *testing.T) {
+	t.Parallel()
+
+	for _, base := range []string{"10^99", "10^98", "10^90", "9" + strings.Repeat("9", 98)} {
+		t.Run(base, func(t *testing.T) {
+			t.Parallel()
+			power, err := evaluate(t, "("+base+")^0.5")
+			if err != nil {
+				t.Fatalf("Evaluate((%s)^0.5) returned error %v", base, err)
+			}
+			root, err := evaluate(t, "sqrt("+base+")")
+			if err != nil {
+				t.Fatalf("Evaluate(sqrt(%s)) returned error %v", base, err)
+			}
+			if power.Value != root.Value {
+				t.Errorf("Evaluate((%s)^0.5) = %q, Evaluate(sqrt(%s)) = %q", base, power.Value, base, root.Value)
 			}
 		})
 	}
@@ -814,6 +849,12 @@ func TestOperatorTable(t *testing.T) {
 	})
 }
 
+// integerDigitsOf counts the digits before the decimal point of a canonical value.
+func integerDigitsOf(value string) int {
+	whole, _, _ := strings.Cut(strings.TrimPrefix(value, "-"), ".")
+	return len(whole)
+}
+
 func FuzzEvaluate(f *testing.F) {
 	seeds := []string{
 		"2+3*4", "(2+3)*4", "1/3*3", "sqrt (16)", "1 2", "  2 + 2  ", "2^100", "0*-1", "-0.0",
@@ -823,6 +864,7 @@ func FuzzEvaluate(f *testing.F) {
 		"(1.1^1000)^1000", "99^999.5", "-0.00000000000000005", "1" + strings.Repeat("0", 100),
 		strings.Repeat("(", 33) + "1" + strings.Repeat(")", 33), strings.Repeat("(", 33),
 		"2×3", "2\n3", "é", "😀", "1e5", "2^0.5", "9^999.5", "1/10^33*10^33", "50%%", "2%^2",
+		strings.Repeat("9", 100) + "+0.99999999999999999", "(10^99)^0.999",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -856,6 +898,9 @@ func FuzzEvaluate(f *testing.F) {
 		}
 		if len(got.Value) > maxValueLength {
 			t.Errorf("Evaluate(%q).Value has %d bytes, want at most %d", input, len(got.Value), maxValueLength)
+		}
+		if digits := integerDigitsOf(got.Value); digits > MaxIntegerDigits {
+			t.Errorf("Evaluate(%q).Value = %q has %d integer digits, want at most %d", input, got.Value, digits, MaxIntegerDigits)
 		}
 		if got.Expression == "" {
 			t.Errorf("Evaluate(%q) returned an empty normalized expression", input)

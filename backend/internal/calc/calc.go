@@ -49,5 +49,9 @@ func (c *Calculator) Evaluate(ctx context.Context, input string) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Expression: norm.expression, Value: c.numbers.canonical(value)}, nil
+	text, err := c.numbers.canonical(value)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Expression: norm.expression, Value: text}, nil
 }

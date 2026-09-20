@@ -153,8 +153,8 @@ export function messageFor(error: ApiError): string {
   const status = error.status ?? 0
   if (status >= 500) return UNAVAILABLE_MESSAGE
   if (isValidationFailure(error)) {
-    const message = error.problem?.errors?.[0]?.message
-    return message ?? GENERIC_MESSAGE
+    const message = error.problem?.errors?.[0]?.message ?? ''
+    return message === '' ? GENERIC_MESSAGE : message
   }
   if (status === 422 && isArithmeticCode(error.code)) return ARITHMETIC_MESSAGES[error.code]
   return GENERIC_MESSAGE

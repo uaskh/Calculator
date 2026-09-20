@@ -44,9 +44,10 @@ Run the checks instead of reasoning about them, and report exactly what ran and 
 | Vulnerabilities | | ✓ | `make vuln` | same commands; report "not run" when offline |
 | Containers | | ✓ | see below | — |
 
-- **Dependency policy**: `backend/go.mod` has no `require`, `replace` or `tool` directive,
-  and `cd frontend && npm ls --omit=dev --depth=0` lists only `react`, `react-dom` and
-  packages the user approved in the plan.
+- **Dependency policy**: `backend/go.mod` requires only `github.com/shopspring/decimal`
+  (the single module approved in `.claude/CLAUDE.md`) and has no `replace` or `tool`
+  directive, and `cd frontend && npm ls --omit=dev --depth=0` lists only `react`,
+  `react-dom` and packages the user approved in the plan.
 - **Containers** (only when `docker info` succeeds and Dockerfiles exist):
   `docker compose up --build --detach --wait`, then
   `curl -fsS http://localhost:3000/ >/dev/null` and

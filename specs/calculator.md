@@ -228,7 +228,9 @@ break directness (`200+(10)%` = 220), and `%` binds tighter than `^` (`2%^2` = 0
   `2^-1000` = `0`, `0.5^-1000` = `RESULT_TOO_LARGE`, `0^-1` = `DIVISION_BY_ZERO`).
 - Inexact operations — `/`, `^` with a non-integer exponent, `sqrt` — are computed with at
   least 40 guard digits (Newton iteration for `sqrt`; for the fractional part of `^`,
-  `exp(f·ln x)` evaluated in fixed point on `math/big` integers with 88 places, because the
+  `exp(f·ln x)` evaluated in fixed point on `math/big` integers at 172 places (100 integer
+  digits + 32 places + 40 guard places, with an exact `2^k` split so no error is amplified),
+  because the
   library's `PowWithPrecision` has a data race under concurrent use and seeds its logarithm
   from a `float64`, see decision 35) and rounded half away from zero to 32 places, so that
   the 32-place value is correctly rounded and guard digits absorb intermediate error
@@ -366,7 +368,8 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
   `C ⌫ ( )` / `7 8 9 ÷` / `4 5 6 ×` / `1 2 3 −` / `0 . % +` / `sqrt ^ =`; `=` is
   `type="submit"` in the form wrapping the input. Non-digit keys have `aria-label`s:
   "clear", "backspace", "open parenthesis", "close parenthesis", "divide", "multiply",
-  "subtract", "add", "decimal point", "percent", "square root", "power", "equals".
+  "subtract", "add", "decimal point", "percent", "sqrt, square root" (the visible text
+  must be part of the accessible name, WCAG 2.5.3; decision 36), "power", "equals".
   `sqrt` inserts `sqrt(`; every key appends at the end of the expression and places the
   caret there, and an insert that would exceed 1,024 characters is ignored (`maxLength`
   does not cover programmatic changes). `=` spans two columns in the last row. The document
@@ -474,7 +477,8 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
 | 31 | History duplicates | Always append | 2026-09-17 |
 | 32 | Validation messages | Fixed templates per code (section 6), shown verbatim by the UI | 2026-09-17 |
 | 33 | Handler timeout | 503 problem `TIMEOUT` | 2026-09-17 |
-| 35 | Fractional `^` | Computed in-package (`exp(f·ln x)` in fixed point on `math/big`, 88 places) instead of `decimal.PowWithPrecision`, which races under concurrent use (package-level factorial cache, `go test -race` fails) and seeds `Ln` from a `float64`; the library still parses, rounds, multiplies and divides | 2026-09-18 |
+| 36 | `sqrt` key label | `aria-label="sqrt, square root"` so the visible text is part of the accessible name (WCAG 2.5.3, speech control) | 2026-09-19 |
+| 35 | Fractional `^` | Computed in-package (`exp(f·ln x)` in fixed point on `math/big`, 172 places: 100 integer digits + 32 places + 40 guard, exact `2^k` split) instead of `decimal.PowWithPrecision`, which races under concurrent use (package-level factorial cache, `go test -race` fails) and seeds `Ln` from a `float64`; the library still parses, rounds, multiplies and divides | 2026-09-18 |
 | 34 | Audit assumptions | The audit's low-risk assumptions (request ID, CORS, security headers, config defaults, log fields, focus and status behaviour, percent edge cases, validation order, Playwright projects, compose ports, `=` key span) are written into sections 4–10 and testability rewrites into NFR-1/2/4/6/8 | 2026-09-17 |
 
 ## 12. Open questions

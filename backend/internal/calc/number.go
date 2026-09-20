@@ -41,12 +41,15 @@ type numbers struct {
 	fixed          *fixedPoint // exp and ln for fractional powers
 }
 
+// newNumbers builds the arithmetic. The fixed-point context for fractional powers is
+// sized so that the largest reachable result (MaxIntegerDigits integer digits) is still
+// correct in all of its IntermediatePlaces decimals after the guard margin.
 func newNumbers() *numbers {
 	return &numbers{
 		one:            decimal.NewFromInt(1),
 		magnitudeLimit: decimal.New(1, MaxIntegerDigits),
 		maxExponent:    decimal.NewFromInt(MaxExponent),
-		fixed:          newFixedPoint(guardPlaces),
+		fixed:          newFixedPoint(MaxIntegerDigits + IntermediatePlaces),
 	}
 }
 
@@ -77,10 +80,15 @@ func (n *numbers) checkMagnitude(d decimal.Decimal) error {
 	return nil
 }
 
-// canonical rounds the final value to ResultPlaces and formats it: optional "-", digits,
-// optional fraction without trailing zeros, no exponent, never "-0".
-func (n *numbers) canonical(d decimal.Decimal) string {
-	return roundHalfAwayFromZero(d, ResultPlaces).String()
+// canonical rounds the final value to ResultPlaces, enforces the magnitude cap on the
+// rounded value (a result just below 10^100 can round up to it) and formats it: optional
+// "-", digits, optional fraction without trailing zeros, no exponent, never "-0".
+func (n *numbers) canonical(d decimal.Decimal) (string, error) {
+	d = roundHalfAwayFromZero(d, ResultPlaces)
+	if err := n.checkMagnitude(d); err != nil {
+		return "", err
+	}
+	return d.String(), nil
 }
 
 func (n *numbers) add(_ context.Context, left, right decimal.Decimal) (decimal.Decimal, error) {

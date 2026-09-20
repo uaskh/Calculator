@@ -41,9 +41,10 @@ function deferredResponses() {
   return pending
 }
 
+/** Asserts the whole result text, not a substring: "4" must not be satisfied by "14". */
 async function expectResult(text: string) {
   await waitFor(() => {
-    expect(output()).toHaveTextContent(text)
+    expect(output().textContent).toBe(text)
   })
 }
 
@@ -189,13 +190,13 @@ describe('<Calculator />', () => {
       await user.type(input(), '2*(3+4')
       await expectResult('14')
 
-      await user.type(input(), ')')
-      await user.type(input(), ')')
       server.use(
         http.post(EVALUATE_URL, () =>
           validationFailed('UNBALANCED_PARENTHESIS', "unbalanced ')' at character 8", 7),
         ),
       )
+      await user.type(input(), ')')
+      await user.type(input(), ')')
       await waitFor(() => {
         expect(statusText()).toHaveTextContent("unbalanced ')' at character 8")
       })
@@ -241,7 +242,7 @@ describe('<Calculator />', () => {
       const user = userEvent.setup()
       renderWithProviders(<Calculator />)
 
-      for (const name of ['square root', '1', '6', 'close parenthesis']) {
+      for (const name of ['sqrt, square root', '1', '6', 'close parenthesis']) {
         await user.click(key(name))
       }
 
@@ -322,10 +323,7 @@ describe('<Calculator />', () => {
       expect(statusText()).toBeEmptyDOMElement()
       const afterCommit = sent.length
 
-      await new Promise((resolve) => setTimeout(resolve, 400))
-      expect(sent).toHaveLength(afterCommit)
-      expect(output()).toBeEmptyDOMElement()
-
+      // The next request is the one for the edit, so nothing was sent for the commit itself.
       await user.type(input(), '*3')
       await waitFor(() => {
         expect(sent).toHaveLength(afterCommit + 1)
@@ -368,11 +366,15 @@ describe('<Calculator />', () => {
 
       if (text !== '') await user.type(input(), text)
       await user.keyboard('{Enter}')
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      expect(sent).toEqual([])
       expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+      // The first request ever sent is the one for the next edit, not for the Enter.
+      await user.type(input(), '1')
+      await waitFor(() => {
+        expect(sent).toEqual([`${text}1`])
+      })
+      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
     })
 
     it('treats a committed EMPTY as a blank result with no alert and no history (FR-11.6)', async () => {
@@ -388,7 +390,9 @@ describe('<Calculator />', () => {
       await waitFor(() => {
         expect(sent).toEqual(['(', '('])
       })
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      await waitFor(() => {
+        expect(key('equals')).toBeEnabled()
+      })
 
       expect(input()).toHaveValue('(')
       expect(output()).toBeEmptyDOMElement()
@@ -512,8 +516,11 @@ describe('<Calculator />', () => {
       expect(screen.getByRole('button', { name: '2+2 = 4' })).toBeInTheDocument()
 
       pending[0]?.({ expression: '1/0+', result: '99' })
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(output()).toBeEmptyDOMElement()
+      // The stale response resolves first, yet the next result shown is the fresh one.
+      server.resetHandlers()
+      await user.type(input(), '2+2')
+      await expectResult('4')
+      expect(screen.queryByText('99')).not.toBeInTheDocument()
     })
 
     it('clears the same way with the C key', async () => {
