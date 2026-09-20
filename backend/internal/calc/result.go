@@ -1,6 +1,3 @@
-// Package calc is the calculator domain: it lexes, normalizes, parses and evaluates
-// arithmetic expressions with exact decimal arithmetic. It knows nothing about HTTP or
-// JSON; the transport layer maps its results and errors to the API contract.
 package calc
 
 // Result is a successful evaluation.
