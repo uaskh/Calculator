@@ -21,9 +21,13 @@ the evaluator.
   minus breaks it (`200+-10%` = 199.9), a group _inside_ the `%` node does not
   (`200+(10)%` = 220), and for repeated `%` only the outermost node receives the base
   (`100+50%%` = 100.5).
-- The rule lives in the operator table: the `+` and `-` entries carry a
-  `percentRelativeRight` flag, and the `%` entry's evaluate function takes an optional base.
-  The parser and evaluator read the table; they contain no knowledge of `%`.
+- The rule lives on the `%` entry of the operator table: a postfix entry may declare
+  `relativeTo`, a predicate over the parent operator, and `%` declares "any binary
+  operator at additive precedence". When the evaluator sees a postfix node as the direct
+  right operand of a binary operator it asks the postfix entry whether it wants the left
+  value as its base; the `+` and `-` entries carry no percent-specific knowledge, so a new
+  additive operator gets relative percent without a flag (proved by `TestOperatorTable`).
+  The parser and evaluator contain no knowledge of `%` itself.
 - This is the Strategy pattern realised with Go function values: each table entry holds
   an interchangeable evaluation function (`binaryFunc` or `postfixFunc`) that the
   evaluator calls without knowing which operator it is, in the same way `http.HandlerFunc`

@@ -7,6 +7,11 @@ has a strict OpenAPI contract with RFC 9457 problem details, every layer is test
 handler, fuzz, black-box API, component, browser end-to-end), and the stack runs with one
 command in containers.
 
+**Try it online:** <https://thunderous-sopapillas-53e844.netlify.app/> (the web app on
+Netlify, proxying `/api` to the Go service on Render, both on free plans as described in
+[docs/deployment.md](docs/deployment.md); the first request after a quiet period may take
+a few seconds while the API wakes up).
+
 ## Features
 
 - Operators `+ - * /`, exponentiation `^` (right-associative, binds tighter than unary
@@ -79,7 +84,8 @@ frontend/                    Vite + React + TypeScript
   e2e/                       Playwright specs (desktop and mobile)
   nginx.conf, Dockerfile, playwright.config.ts, vitest.config.ts, vite.config.ts
 scripts/                     dev.sh (make dev), coverage-report.sh (docs/coverage.md)
-docs/                        adr/ (decision records), coverage.md, prompts.md
+docs/                        adr/ (decision records), coverage.md, prompts.md, deployment.md
+prompts/                     the prompts that produced the tooling and the spec
 specs/                       product spec and implementation plan
 compose.yaml                 two-container stack (backend + web)
 Makefile                     every developer task (make help)
@@ -575,16 +581,17 @@ before remaining connections are closed; a second signal stops the process immed
 | Unit, component and API tests        |                                                                       | `make test`                                       |
 | Everything CI runs                   |                                                                       | `make verify`                                     |
 
-What the suites contain (at commit `b74872e`):
+What the suites contain:
 
-- Go: 994 test cases including subtests, across domain tables, fuzz targets
+- Go: 995 test cases including subtests, across domain tables, fuzz targets
   (`FuzzEvaluate`, `FuzzDecodeJSON`, `FuzzValidRequestID`), handler tests and black-box
   API tests.
-- Vitest: 360 tests in 16 files (reducer, hook with fake timers, API client with MSW,
-  components, contrast maths).
+- Vitest: 403 tests in 16 files (reducer, hook with fake timers, API client with MSW,
+  components, key routing, and a contrast test over 74 token pairs in both themes).
 - Playwright: 118 tests in 7 spec files, run on both projects: journeys, errors and
-  recovery via `page.route`, keyboard-only use, axe WCAG 2.2 AA in light and dark themes,
-  44 px targets and no horizontal overflow at 320, 412 and 1280 px.
+  recovery via `page.route`, keyboard-only use and typing without a click, the desktop
+  panel layout, axe WCAG 2.2 AA in light, dark, reduced-motion and print media, 44 px
+  targets and no horizontal overflow at 320, 412, 767, 768, 1280 and 1920 px.
 
 Coverage (from [`docs/coverage.md`](docs/coverage.md)): backend 97.0% of statements
 (`cmd/api` 94.7, `app` 100, `calc` 98.8, `config` 100, `httpapi` 94.9, `server` 90.0);
@@ -592,9 +599,18 @@ frontend 100% lines, 98.5% statements, 100% functions, 96.3% branches. Threshold
 per side and 90% for the domain package. Run `make coverage` and open
 `coverage/backend/index.html` or `coverage/frontend/index.html`.
 
+The backend is not at 100% on purpose. What remains uncovered is `main()` itself (the
+testable `run` function under it is covered), an interface hook the standard library calls
+only in edge cases, and error-propagation branches after calls that cannot fail once the
+earlier checks have run (a `json.Marshal` of a struct that always encodes, a literal that
+the lexer already validated, a context cancelled between two nodes). Covering them would
+mean deleting defensive error handling or faking conditions that cannot occur, and such
+tests assert the implementation rather than any behaviour.
+
 `make coverage` also runs the evaluator benchmark over the worst-case corpus and fails if
 any case exceeds 5 ms; the slowest case, a 255-step chain of fractional powers
-(`pow_fractional_chain_0.7^0.7_x255`, the longest the length limit admits), takes 2.2 ms.
+(`pow_fractional_chain_0.7^0.7_x255`, the longest the length limit admits), takes about
+2 ms.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs five jobs: `hygiene`
 (the assessment brief must not be tracked), `backend` (gofmt, golangci-lint, race tests
@@ -604,55 +620,247 @@ Playwright) and `docker` (compose build, `up --wait`, smoke test on port 3000).
 
 ## Design decisions
 
-- **Standard library plus one module** ([ADR 0001](docs/adr/0001-architecture-and-dependency-policy.md)).
-  The backend uses `net/http` routing, `encoding/json` and `log/slog`; the only module is
-  `shopspring/decimal`. Routing, middleware and validation are explicit code with tests,
-  and there is one module to audit. The trade-off is that helpers a framework would
-  provide are written and maintained in-house. The frontend keeps `react` and `react-dom`
-  as its only runtime dependencies.
-- **One endpoint, RFC 9457 errors** ([ADR 0002](docs/adr/0002-api-shape-and-error-model.md)).
-  `POST /api/v1/evaluate` is the whole API; a resource-style API was rejected because
-  nothing is stored. Errors are problem documents with a stable `code`: 400 for input the
-  user must fix (with a position), 422 for well-formed expressions without a value.
-  Clients branch on codes, never on text.
-- **Exact decimals with bounded precision** ([ADR 0003](docs/adr/0003-number-representation.md)).
-  `float64` was rejected (binary rounding, `Inf`/`NaN`) and `big.Rat` too (unbounded
-  growth, no `sqrt(2)`). Literals and intermediates are rounded to 32 places, results to
-  16, inexact operations carry 72 guard places, and limits are errors rather than
-  overflow. Fractional powers are computed in-package (`exp(f·ln x)` in binary fixed
-  point on `math/big`, at 80, 112 or 172 decimal places depending on the size of the
-  base) because the library's `PowWithPrecision` races under concurrent use and seeds
-  from a `float64`. The costs: magnitudes below `5·10^-33`
-  collapse to `0`, and `(-2)^(1/3*3)` is `INVALID_POWER`.
-- **Lenient normalization** ([ADR 0004](docs/adr/0004-lenient-normalization.md)). Live
-  evaluation means most requests are incomplete (`3+4*`, `2*(3+4`). A token-level
-  normalization step repairs trailing operators, a trailing `.` and unmatched `(`, and the
-  evaluated text is echoed so the UI never guesses. A permissive grammar was rejected
-  because it blurs valid and invalid input.
-- **Calculator-style percent as a table entry** ([ADR 0005](docs/adr/0005-percent-semantics.md)).
-  `200+10%` = `220` matches handheld calculators, not spreadsheets. The rule lives in the
-  operator table (`+`/`-` flag their right operand; `%` takes an optional base), so the
-  parser and evaluator contain no knowledge of `%`, and a new operator or function is one
-  table entry.
-- **Debounced live preview with cancellation** ([ADR 0006](docs/adr/0006-live-preview-strategy.md)).
-  One request 150 ms after the last edit, at most one in flight, superseded requests
-  aborted, "Calculating…" after 300 ms, live errors as polite status text, commits as
+This section explains, end to end, why the product and the code are shaped the way they
+are, so a reviewer can check each choice against its reason. The decision records in
+[`docs/adr/`](docs/adr/README.md) hold the long form; the specification
+([`specs/calculator.md`](specs/calculator.md), section 11) records the product decisions
+in the order they were made.
+
+### Scope: a stateless calculator, on purpose
+
+- **No sessions, accounts, persistence or server-side history.** The brief asks for a
+  calculator and nothing else, and a calculation has no state worth keeping between
+  requests, so none was built: YAGNI and KISS, applied deliberately, not by omission.
+  Every request carries the whole expression and every response is complete, so the API
+  needs no database, no session store, no migrations and no clean-up jobs; it can be
+  restarted, scaled or replaced at any moment. The only "state", the history list, lives in the page
+  because that is the only place it is used, and losing it on reload is the documented
+  behaviour rather than a bug. Adding a stored history later means adding a resource, not
+  changing the evaluate endpoint.
+- **No authentication or rate limiting.** There is nothing private to protect and no
+  per-user quota to enforce; the risks that do exist (hostile input, oversized bodies,
+  runaway computation) are handled by validation, limits and timeouts instead. Rate
+  limiting is listed as the first thing to add before public exposure at scale.
+- **Live preview as the primary interaction.** Users expect the answer while they type;
+  `=` exists to commit a calculation into the history and to continue from its result.
+  This drove the debounce, cancellation and lenient-normalization decisions below.
+- **Optional operations were taken into scope** (`^`, `sqrt`, calculator-style `%`)
+  because they are exactly what makes a hand-written parser worth having; without them a
+  four-operator calculator would not need most of the design below.
+
+### Architecture: two thin tiers around a pure domain
+
+- **A Go REST microservice plus a React single-page app** ([ADR 0001](docs/adr/0001-architecture-and-dependency-policy.md)),
+  as the brief requires. Inside the backend the dependency arrows point inwards: the
+  domain package `internal/calc` knows nothing about HTTP or JSON; `internal/httpapi`
+  translates between the wire and the domain and owns the one-method `Evaluator`
+  interface it needs; `internal/app` is the only place that constructs dependencies;
+  `cmd/api` only reads the environment and handles signals. The same rule holds in the
+  browser: components render, one hook orchestrates timers and requests, a pure reducer
+  decides, and all HTTP goes through a typed client in `src/api`. Consequence: the
+  arithmetic is tested without a server, the handler without arithmetic, and each side
+  can change its transport without touching the other.
+- **Standard library plus one module.** The constraint was chosen to keep the focus on
+  Go itself: routing (`net/http` method patterns), decoding, problem responses and
+  middleware are explicit code with their own tests instead of a framework's conventions,
+  so a reviewer sees how the language handles each concern rather than how a library
+  hides it. It also keeps the supply chain at one audited module (`shopspring/decimal`,
+  needed for exact arithmetic). The frontend keeps `react` and `react-dom` as its only runtime
+  dependencies for the same reason.
+
+### The expression engine: lexer, normalizer, parser, AST, evaluator
+
+- **Why an abstract syntax tree instead of evaluating as we read.** The alternative was
+  a streaming evaluator (shunting-yard: a value stack and an operator stack, applying an
+  operator whenever a lower-precedence one arrives). It handles precedence and
+  associativity correctly and runs in linear time like our parser, so it was not rejected
+  for performance. It was rejected for four requirements that need the structure a tree
+  keeps: the `%` rule depends on the parent operator and group boundaries (`200+10%` is
+  relative to `200`, `200+(10%)` and `200+10%*2` are not), which a stream has consumed by
+  the time it reaches `%`; the specification orders syntax errors (400) before arithmetic
+  errors (422), and a streaming evaluator computes as it goes, so `10^100*2 )` would
+  report `RESULT_TOO_LARGE` before it ever met the stray `)`; error messages quote the
+  offending token at its position in the original input, which the parser has and a value
+  stack does not; and separating "is it valid" from "what is it worth" keeps both halves
+  testable on their own and lets the evaluator check the request context at every node
+  and every multiplication step, so the 5 s deadline becomes a 503 even for hostile input.
+  Regular expressions cannot express nested parentheses at all, and any form of `eval` is
+  excluded by the brief. The tree is small (six node kinds), built in one pass by
+  precedence climbing, and costs a few allocations per request.
+- **Why a table of operators instead of code per operator** (ADR 0005). Precedence,
+  associativity and the evaluation function of every operator, and every function such as
+  `sqrt`, are entries in two tables that the lexer, parser and evaluator read. Adding an
+  operator is one entry plus tests; nothing else changes, which the test suite proves by
+  registering throw-away operators. The `%` rule lives on the `%` entry (it declares which
+  parent operators make it relative), so even the `+` and `-` entries carry no knowledge
+  of percent. This is the Strategy pattern with Go function values, the same shape as
+  `http.HandlerFunc`.
+- **Why lenient normalization runs before parsing** ([ADR 0004](docs/adr/0004-lenient-normalization.md)).
+  With live preview, most requests are incomplete (`3+4*`, `2*(3+4`). Rejecting them
+  would make the display flicker with messages that describe the user's own typing, and
+  fixing them in the browser would duplicate grammar knowledge. So the backend drops
+  trailing operators and dots, closes unmatched parentheses, evaluates, and echoes the
+  text it evaluated ("Evaluated as 2*(3+4)"); the UI never guesses. A permissive grammar
+  was rejected because it blurs the line between "incomplete" and "wrong".
+- **Why validation stops at the first error in a fixed order.** Length, then lexing, then
+  normalization, then emptiness, then depth, then parsing. One error at a time is what a
+  person can act on, the order makes messages deterministic, and cheap checks run before
+  expensive ones so hostile input fails fast.
+
+### Numbers: exact decimals with a stated precision policy
+
+- **Why not `float64`** ([ADR 0003](docs/adr/0003-number-representation.md)). A calculator
+  that answers `0.30000000000000004` to `0.1+0.2` is wrong for its users, and JSON cannot
+  carry `NaN` or `Infinity`. Exact rationals were rejected too: they grow without bound
+  and cannot represent `sqrt(2)`.
+- **Why 32 intermediate places, 16 result places and a `10^100` cap.** Exact decimal
+  arithmetic has no natural end for `1/3` or `sqrt(2)`, so every intermediate is rounded
+  to 32 places (with 72 guard places on inexact operations, which makes `1/3*3` exactly
+  `1`), the answer is shown at 16 places so guard noise never reaches the display, and any
+  value at or above `10^100` is an error rather than an overflow. Integer digits are never
+  rounded (`2^100` and `10^99` are exact). These numbers are constants, chosen so that the
+  longest result is 118 characters and the worst-case expression evaluates in about 2 ms.
+- **Why fractional powers are computed in-package.** The decimal library's power function
+  has a data race under concurrent use and seeds its logarithm from a `float64`; both were
+  verified, so `exp(f·ln x)` is computed in fixed point on `math/big`, with a precision
+  tier chosen from the size of the base. The library is still used for parsing, rounding,
+  multiplication and division.
+- **Why results are JSON strings.** A JavaScript number would silently round a
+  31-digit integer; a string reaches the screen unchanged.
+
+### The API: one endpoint and a strict error contract
+
+- **One `POST /api/v1/evaluate`** ([ADR 0002](docs/adr/0002-api-shape-and-error-model.md)).
+  Nothing is created or stored, so a resource-style API would be pretence. One operation
+  keeps the contract simple and uniform (one request shape, one success shape, one error
+  model), and the versioned base path leaves room to extend it by adding resources later
+  rather than reshaping this one.
+- **RFC 9457 problem details with stable codes.** Clients branch on `code`, never on
+  text. The 400/422 split mirrors the two things a user can do: fix the input (400,
+  with a 0-based character position and a fixed message template) or accept that the
+  value does not exist within the limits (422, five codes with their own sentences).
+  Every response, success or failure, carries a request ID, `Cache-Control: no-store` and
+  the security headers, so behaviour is uniform for caches, proxies and log correlation.
+- **Strict input handling.** Exact media type, unknown fields rejected, a 4 KiB body
+  limit before decoding, a 1,024-code-point expression limit, a nesting limit of 32 and a
+  5 s deadline: each protects one resource (memory, CPU, stack, wall-clock) and each has a
+  test.
+
+### The frontend: predictable under a slow network
+
+- **Debounce, cancel, commit** ([ADR 0006](docs/adr/0006-live-preview-strategy.md)). One
+  request 150 ms after the last edit, at most one in flight, superseded requests aborted,
+  "Calculating…" only after 300 ms, live errors as polite status text and commits as
   authoritative round trips with alerts. Evaluating in the browser was rejected because
-  the backend owns the grammar and precision policy. The logic is a pure reducer driven by
-  a hook that owns the timers.
+  the backend owns the grammar and precision. The state machine is a pure reducer, tested
+  exhaustively with fake timers; the hook owns the timers and the abort controller.
+- **Desktop panel and typing without a click** (spec decisions 37 and 38). Below 48 rem
+  the app is a phone calculator; above it, one centred device panel with the keypad left
+  and History right. The input is focused on load and keys pressed anywhere reach it,
+  while buttons keep native Enter and Space and modifier or IME keys are never
+  intercepted.
+- **A physical-calculator look with system fonts** (spec decision 40): dark LCD, keys
+  with depth grouped by colour, paper-tape history, every colour a token with light and
+  dark values and a contrast test. No web font, image or dependency, so nothing was
+  traded for the look.
+- **Accessibility as a test, not a checklist.** Labelled input, a live region for the
+  result, `role="alert"` linked to the input after a failed commit, 44 px targets, axe
+  WCAG 2.2 AA in light, dark, reduced-motion and print media, and keyboard-only
+  journeys, all in the Playwright suite.
+
+### Quality: tests at every boundary
+
+- **One tool per layer.** Go tables and fuzz targets for the domain, `httptest` for the
+  handler, real HTTP against the wired app for the contract, Vitest with MSW at the HTTP
+  boundary for the browser logic, Playwright against the real backend for the journeys.
+  Coverage thresholds (80% per side, 90% for the domain) and a 5 ms benchmark gate over a
+  named worst-case corpus fail the build, so the numbers in this README are enforced, not
+  aspirational.
+- **Reviews with evidence.** Two review rounds (correctness and contract, then logs,
+  SOLID and production readiness) produced reproduced findings that were fixed with
+  regression tests; the reports are kept locally in `.reviews/`.
+
+### Operations: logs, shutdown and containers
+
+- **Logs you can act on.** One `starting` line with the effective configuration and build
+  identity; one line per request with a fractional duration, the problem code on every
+  failure, and levels chosen so that alerts fire on faults only (abandoned live previews
+  and readiness probes during a stop are not errors). Bodies and expressions are never
+  logged.
+- **Graceful stops.** Readiness flips first, the server keeps serving for
+  `HTTP_SHUTDOWN_DELAY` so a load balancer can drain it, in-flight requests get
+  `HTTP_SHUTDOWN_TIMEOUT`, a second signal stops the process at once.
 - **Two containers behind nginx** ([ADR 0007](docs/adr/0007-container-topology.md)). The
-  API runs on a distroless static image as a non-root user with a `-healthcheck` flag; the
-  web build is served by unprivileged nginx, which proxies `/api/` and adds the security
-  headers once. Same-origin calls keep CORS off. Bundling the SPA into the Go binary was
-  rejected because it couples the release cycles of the two tiers.
+  API on a distroless static image as a non-root user with its own `-healthcheck`; the web
+  build on unprivileged nginx, which proxies `/api/` so calls stay same-origin and CORS
+  stays off. Bundling the SPA into the Go binary was rejected because it couples the two
+  release cycles. The free hosting in [`docs/deployment.md`](docs/deployment.md) keeps the
+  same shape (a static host proxying `/api/*` to the container).
 
-## Assumptions
+## Limitations and next steps
 
-Where the requirements were silent, the implementation behaves as follows.
+Out of scope by design:
+
+- No persistence, accounts, authentication or rate limiting. History lives in the page and
+  is lost on reload.
+- `sqrt` is the only function; there are no variables, scientific notation input or
+  complex numbers.
+- English only, with `.` as the decimal point; only ASCII operators are accepted.
+- Magnitudes below `5·10^-33` become `0`, and `(-2)^(1/3*3)` is `INVALID_POWER` because
+  the exponent is evaluated before the check (see the expression language section).
+- A body of non-ASCII characters can exceed the 4 KiB body limit (413) before it reaches
+  the 1,024-code-point check (`TOO_LONG`); such input would be rejected as
+  `INVALID_CHARACTER` anyway.
+- Results carry at most 16 decimal places and intermediates 32; values below `5·10^-33`
+  vanish, and a fractional power of a value near the `10^100` cap is correct to 32 places
+  only because the fixed-point tiers are sized for it, so raising the cap means resizing
+  them.
+- Typing anywhere relies on the browser delivering key events to the page: screen-reader
+  browse modes consume keys first (the input still works when focused), and a dead key
+  such as `^` on some layouts is completed only inside the input.
+- On the free hosting described in `docs/deployment.md` the API sleeps after 15 idle
+  minutes unless pinged, and the first request after a sleep can exceed the client's 10 s
+  timeout.
+
+Possible next steps:
+
+- More functions (`abs`, `ln`, trigonometry) through the function table, each one entry
+  plus tests.
+- Server-side history as a new resource, leaving `POST /api/v1/evaluate` unchanged.
+- Internationalisation of the UI wording and the decimal separator.
+- Rate limiting (429 with `Retry-After`) and a metrics endpoint before exposing the API to
+  untrusted traffic at scale; the access log already carries what a dashboard needs.
+- A configurable result precision (the two constants in `internal/calc/number.go`) if 16
+  places prove too few for a use case.
+
+## Troubleshooting
+
+| Symptom                                                                   | Fix                                                                                                                                                |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `address already in use` on 8080, 5173 or 3000                            | Find the process (`lsof -i :8080`) and stop it, or set `HTTP_ADDR` for the API; Vite and the containers use fixed ports                            |
+| Playwright cannot find a browser                                          | `cd frontend && npx playwright install chromium` (also done by `make setup`)                                                                       |
+| `make lint` fails with `golangci-lint: command not found`                 | Install golangci-lint v2 (`brew install golangci-lint`)                                                                                            |
+| `docker compose up` fails with `Cannot connect to the Docker daemon`      | Start Docker Desktop (or the Docker service on Linux), confirm with `docker info`, retry                                                           |
+| `docker compose` is "not a docker command"                                | Install Compose v2 (bundled with Docker Desktop; on Linux `docker-compose-plugin`); the old `docker-compose` v1 binary is not supported            |
+| `make: command not found` (Windows, or macOS without command-line tools)  | Use the plain commands: `docker compose up --build --wait` and `docker compose down`; `make` is only needed for the developer targets              |
+| First `docker compose up` fails while downloading images or packages      | The first build needs internet access to pull the base images, the Go module and npm packages; rerun once the connection is back                   |
+| 502 from `/api/` on http://localhost:3000 after rebuilding only `backend` | nginx resolves the `backend` hostname once at startup; restart the web container (`docker compose restart web`) or use `make docker-up` for both   |
+| 413 `PAYLOAD_TOO_LARGE` for an expression shorter than 1,024 characters   | Non-ASCII characters take several bytes each; the 4 KiB body limit applies before the length check. Such characters are `INVALID_CHARACTER` anyway |
+| `make coverage` fails on the benchmark limit on a slow machine            | Raise the limit for the local run (`make coverage BENCH_MAX_MS=10`); CI keeps 5 ms                                                                 |
+| `make coverage` or `make verify` fails a coverage threshold               | Open `coverage/backend/index.html` or `coverage/frontend/index.html` to find the uncovered lines; thresholds are not lowered                       |
+
+## Assumptions made during implementation
+
+The choices below were made by the AI assistant that built the code wherever the
+specification was silent, recorded as assumptions A-1 to A-34 in
+[`specs/calculator.plan.md`](specs/calculator.plan.md), and confirmed by the user when the
+plan was approved and during the reviews. They describe how the implementation behaves;
+none of them changes a stated requirement.
 
 - A number ending in `.` is valid only as the last token of the trimmed input (`2.` → `2`,
-  `(2.` → `(2)`); anywhere else it is `INVALID_NUMBER` at the number's position (`2.+3`).
-  Two dots in one token are always `INVALID_NUMBER`.
+  `(2.` → `(2)`); anywhere else it is `INVALID_NUMBER` at the number's position, with the
+  token quoted in the message (`234*0.%` → "invalid number '0.' at character 5"). Two dots
+  in one token are always `INVALID_NUMBER`.
 - `UNEXPECTED_TOKEN` messages quote the token's source text (`1 2` → "unexpected '2' at
   character 3"); an input that ends early, or a `)` that normalization appended, reports
   "unexpected end of input" with `position` equal to the input length. `INVALID_CHARACTER`
@@ -672,16 +880,21 @@ Where the requirements were silent, the implementation behaves as follows.
   negative exponent of any kind first takes the reciprocal through the division path.
 - The benchmark corpus is: a 1,024-digit literal, `0.` followed by 1,022 digits,
   `1.0001^1000`, `(1.0001^1000)^1000`, `(1.1^1000)^1000` (pre-check reject), 32-deep
-  `2^0.5` and `sqrt` chains, 32-deep parentheses, `2^332`, `99^50` and `9^999.5`.
+  `2^0.5` and `sqrt` chains, 32-deep parentheses, `2^332`, `99^50`, `9^999.5`,
+  `(10^99)^0.999`, and the 255-step fractional-power chains with bases `0.5`, `2` and
+  `0.7` (the longest the length limit admits).
 - API responses also carry `Content-Security-Policy: default-src 'none'; frame-ancestors
 'none'`, and `Access-Control-Expose-Headers: X-Request-ID` when CORS applies. nginx hides
   the API's security headers on proxied responses and serves the HTML shell with
   `default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self';
 form-action 'self'; frame-ancestors 'none'`. nginx accepts 8 KiB bodies so oversized
   requests reach the API and get its 413 problem document.
-- `LOG_FORMAT=text` is set by the `run-backend` target, which `make dev` calls. The access
-  log's `duration_ms` is an integer; `error` holds the problem code and detail for 5xx and
-  the panic value for panics.
+- `LOG_FORMAT=text` is set by the `run-backend` target, which `make dev` calls. In the
+  access log `duration_ms` is fractional, `code`/`error_code` carry the problem codes,
+  `error` is set only for faults, a client-abandoned request is `cancelled: true` with
+  status 499, and `forwarded_for` is logged but never used as `remote_addr`.
+  `HTTP_SHUTDOWN_DELAY` is `0s` unless set (compose sets `3s`); a drain that outlives
+  `HTTP_SHUTDOWN_TIMEOUT` closes the remaining connections and still exits 0.
 - Frontend: `VITE_API_BASE_URL` defaults to empty with `/api/v1` appended;
   `VITE_API_TIMEOUT_MS` defaults to 10 s. An empty or whitespace-only input sends no
   request. A 400 `EMPTY` never sets `aria-invalid`. A response the client cannot parse is
@@ -694,51 +907,20 @@ form-action 'self'; frame-ancestors 'none'`. nginx accepts 8 KiB bodies so overs
   parentheses added by normalization) loads and yields the backend's `TOO_LONG` status
   text. Any edit during an in-flight commit aborts the commit, re-enables `=` and follows
   the debounced path.
-- Escape clears only while focus is in the expression input; keypad and history buttons
-  are reached with Tab and act on Enter or Space. Keypad buttons keep focus on the input
-  (`mousedown` is prevented; `=`, `C` and history activation re-focus it explicitly).
+- Keys pressed on the page background or on a button are routed to the input: printable
+  characters and Backspace edit the end of the expression, Escape clears, Enter on the
+  background commits; Enter and Space on a button, links, disclosure and ARIA buttons keep
+  their native meaning, modifier combinations and IME composition are never intercepted,
+  and a dead key only moves focus so the browser completes it in the input. Keypad taps
+  keep focus on the input (`mousedown` is prevented; `=`, `C` and history activation
+  re-focus it explicitly). The `sqrt` key's accessible name is "sqrt, square root" so its
+  visible label is part of the name.
 - Playwright keeps two projects (`desktop-chromium` = Desktop Chrome at 1280 × 720,
-  `mobile-chromium` = Pixel 7) and checks 320 px by resizing the viewport inside the
-  desktop project; the suite uses ports 18080 and 14173 so it never collides with
-  `make dev`.
+  `mobile-chromium` = Pixel 7) and checks the other widths by resizing the viewport inside
+  each project; the suite uses ports 18080 and 14173 so it never collides with `make dev`.
+  Unexpected request failures (network, timeout, 5xx, unparsable responses) emit one
+  `console.warn` with the kind, status, code and request ID for support; nothing is shown
+  to the user beyond the spec wording.
 - CI mirrors `make verify` in four jobs plus the hygiene check; ESLint is pinned to major
   9 because `eslint-plugin-jsx-a11y` declares support up to ESLint 9. The default branch
   is `main`.
-
-## Limitations and next steps
-
-Out of scope by design:
-
-- No persistence, accounts, authentication or rate limiting. History lives in the page and
-  is lost on reload.
-- `sqrt` is the only function; there are no variables, scientific notation input or
-  complex numbers.
-- English only, with `.` as the decimal point; only ASCII operators are accepted.
-- Magnitudes below `5·10^-33` become `0`, and `(-2)^(1/3*3)` is `INVALID_POWER` because
-  the exponent is evaluated before the check (see the expression language section).
-- A body of non-ASCII characters can exceed the 4 KiB body limit (413) before it reaches
-  the 1,024-code-point check (`TOO_LONG`); such input would be rejected as
-  `INVALID_CHARACTER` anyway.
-
-Possible next steps:
-
-- More functions (`abs`, `ln`, trigonometry) through the function table, each one entry
-  plus tests.
-- Server-side history as a new resource, leaving `POST /api/v1/evaluate` unchanged.
-- Internationalisation of the UI wording and the decimal separator.
-
-## Troubleshooting
-
-| Symptom                                                                   | Fix                                                                                                                                                |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `address already in use` on 8080, 5173 or 3000                            | Find the process (`lsof -i :8080`) and stop it, or set `HTTP_ADDR` for the API; Vite and the containers use fixed ports                            |
-| Playwright cannot find a browser                                          | `cd frontend && npx playwright install chromium` (also done by `make setup`)                                                                       |
-| `make lint` fails with `golangci-lint: command not found`                 | Install golangci-lint v2 (`brew install golangci-lint`)                                                                                            |
-| `docker compose up` fails with `Cannot connect to the Docker daemon`      | Start Docker Desktop (or the Docker service on Linux), confirm with `docker info`, retry                                                           |
-| `docker compose` is "not a docker command"                                | Install Compose v2 (bundled with Docker Desktop; on Linux `docker-compose-plugin`); the old `docker-compose` v1 binary is not supported            |
-| `make: command not found` (Windows, or macOS without command-line tools)  | Use the plain commands: `docker compose up --build --wait` and `docker compose down`; `make` is only needed for the developer targets              |
-| First `docker compose up` fails while downloading images or packages      | The first build needs internet access to pull the base images, the Go module and npm packages; rerun once the connection is back                   |
-| 502 from `/api/` on http://localhost:3000 after rebuilding only `backend` | nginx resolves the `backend` hostname once at startup; restart the web container (`docker compose restart web`) or use `make docker-up` for both   |
-| 413 `PAYLOAD_TOO_LARGE` for an expression shorter than 1,024 characters   | Non-ASCII characters take several bytes each; the 4 KiB body limit applies before the length check. Such characters are `INVALID_CHARACTER` anyway |
-| `make coverage` fails on the benchmark limit on a slow machine            | Raise the limit for the local run (`make coverage BENCH_MAX_MS=10`); CI keeps 5 ms                                                                 |
-| `make coverage` or `make verify` fails a coverage threshold               | Open `coverage/backend/index.html` or `coverage/frontend/index.html` to find the uncovered lines; thresholds are not lowered                       |
