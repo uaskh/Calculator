@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: Service API
+  version: 1.0.0
+  description: >-
+    Replace with a one-paragraph description of the service. Every error response uses
+    RFC 9457 problem details with a stable `code`.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: operations
+    description: Health and readiness probes
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness probe
+      tags: [operations]
+      responses:
+        "200":
+          description: The process is running.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+              example:
+                status: ok
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Readiness probe
+      tags: [operations]
+      responses:
+        "200":
+          description: The service can take traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+              example:
+                status: ready
+        "503":
+          $ref: "#/components/responses/NotReady"
+components:
+  headers:
+    RequestId:
+      description: Correlation ID, echoed from the request when valid, generated otherwise.
+      schema:
+        type: string
+        maxLength: 128
+  schemas:
+    Status:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: JSON path of the offending field.
+        code:
+          type: string
+          example: REQUIRED
+        message:
+          type: string
+          example: is required
+    Problem:
+      type: object
+      description: RFC 9457 problem details with a stable error code.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          example: about:blank
+        title:
+          type: string
+          example: Bad Request
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          example: /api/v1/resource
+        code:
+          type: string
+          example: VALIDATION_FAILED
+        requestId:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+  responses:
+    BadRequest:
+      description: Malformed JSON, wrong types, unknown or missing fields, invalid values.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No resource matches the path.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    PayloadTooLarge:
+      description: The request body exceeds the configured limit.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: The request body is not JSON.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableContent:
+      description: The request is well-formed but breaks a business rule.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InternalError:
+      description: Unexpected failure; details are logged with the request ID.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotReady:
+      description: The service is not ready to take traffic.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"

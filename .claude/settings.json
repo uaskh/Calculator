@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(go vet *)",
+      "Bash(go run *)",
+      "Bash(go list *)",
+      "Bash(go mod init *)",
+      "Bash(go mod tidy *)",
+      "Bash(go mod verify *)",
+      "Bash(go version *)",
+      "Bash(go env *)",
+      "Bash(go doc *)",
+      "Bash(go fmt *)",
+      "Bash(go tool cover *)",
+      "Bash(gofmt *)",
+      "Bash(goimports *)",
+      "Bash(golangci-lint *)",
+      "Bash(govulncheck *)",
+      "Bash(npm run *)",
+      "Bash(npm ci *)",
+      "Bash(npm test *)",
+      "Bash(npm ls *)",
+      "Bash(npm outdated *)",
+      "Bash(npm audit *)",
+      "Bash(npm view *)",
+      "Bash(npm pkg get *)",
+      "Bash(npm --version)",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright test *)",
+      "Bash(npx playwright install *)",
+      "Bash(npx playwright screenshot *)",
+      "Bash(npx playwright show-report *)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(npx prettier *)",
+      "Bash(npx --version)",
+      "Bash(node --version)",
+      "Bash(make *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
+      "Bash(git mv *)",
+      "Bash(git config core.hooksPath *)",
+      "Bash(git --version)",
+      "Bash(bash .claude/hooks/session-context.sh *)",
+      "Bash(bash .claude/hooks/format-staged.sh *)",
+      "Bash(bash .claude/skills/implement/scripts/scaffold.sh *)",
+      "Bash(bash scripts/coverage-report.sh *)",
+      "Bash(bash scripts/dev.sh *)",
+      "Bash(curl *localhost:*)",
+      "Bash(curl *127.0.0.1:*)",
+      "Bash(jq *)",
+      "Bash(sleep *)",
+      "Bash(mkdir *)",
+      "Bash(lsof -i *)",
+      "Bash(docker compose build *)",
+      "Bash(docker compose up *)",
+      "Bash(docker compose down *)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker compose config *)",
+      "Bash(docker compose version *)",
+      "Bash(docker build *)",
+      "Bash(docker images *)",
+      "Bash(docker ps *)",
+      "Bash(docker info *)",
+      "Bash(docker --version)",
+      "Bash(rm backend/*zz_probe_test.go)",
+      "Bash(rm frontend/src/*zz-probe.test.ts*)",
+      "WebFetch(domain:go.dev)",
+      "WebFetch(domain:pkg.go.dev)",
+      "WebFetch(domain:react.dev)",
+      "WebFetch(domain:vite.dev)",
+      "WebFetch(domain:vitest.dev)",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:testing-library.com)",
+      "WebFetch(domain:mswjs.io)",
+      "WebFetch(domain:developer.mozilla.org)",
+      "WebFetch(domain:www.typescriptlang.org)",
+      "WebFetch(domain:typescript-eslint.io)",
+      "WebFetch(domain:eslint.org)",
+      "WebFetch(domain:prettier.io)",
+      "WebFetch(domain:golangci-lint.run)",
+      "WebFetch(domain:docs.docker.com)",
+      "WebFetch(domain:docs.github.com)",
+      "WebFetch(domain:www.rfc-editor.org)",
+      "WebFetch(domain:spec.openapis.org)",
+      "WebFetch(domain:www.w3.org)",
+      "WebFetch(domain:nginx.org)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git merge *)",
+      "Bash(git reset *)",
+      "Bash(git revert *)",
+      "Bash(git restore *)",
+      "Bash(git rm *)",
+      "Bash(git tag *)",
+      "Bash(npm install *)",
+      "Bash(npm i *)",
+      "Bash(npm uninstall *)",
+      "Bash(npm update *)",
+      "Bash(npm create *)",
+      "Bash(npm exec *)",
+      "Bash(go get *)",
+      "Bash(go install *)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.local)",
+      "Read(.env.*.local)",
+      "Read(.env.development)",
+      "Read(.env.test)",
+      "Read(.env.staging)",
+      "Read(.env.production)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.netrc)",
+      "Edit(.env)",
+      "Edit(.env.local)",
+      "Edit(.env.*.local)",
+      "Edit(.env.development)",
+      "Edit(.env.test)",
+      "Edit(.env.staging)",
+      "Edit(.env.production)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/hooks/**)",
+      "Edit(/.claude/githooks/**)",
+      "Bash(sudo *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-context.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\"",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-commit-prep.sh\"",
+            "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-files.sh\"",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/track-changes.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/track-subagents.sh\" start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/track-subagents.sh\" stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/quality-gate.sh\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

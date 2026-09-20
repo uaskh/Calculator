@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Git pre-commit hook: formats staged Go and frontend files before they are committed.
+# Enabled with: git config core.hooksPath .claude/githooks (the Claude hooks do this).
+root="$(git rev-parse --show-toplevel)" || exit 1
+script="$root/.claude/hooks/format-staged.sh"
+[ -f "$script" ] || exit 0
+exec bash "$script"
