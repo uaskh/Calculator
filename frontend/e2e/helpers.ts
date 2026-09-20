@@ -44,6 +44,10 @@ export class CalculatorPage {
   readonly status: Locator
   readonly alert: Locator
   readonly history: Locator
+  /** Every history entry button; empty while History shows its placeholder. */
+  readonly entries: Locator
+  /** The muted line History shows until the first commit (decision 41). */
+  readonly historyPlaceholder: Locator
 
   readonly page: Page
   /** Touch is enabled by the device descriptor of the mobile project. */
@@ -57,6 +61,8 @@ export class CalculatorPage {
     this.status = page.getByRole('status').and(page.locator('p'))
     this.alert = page.getByRole('alert')
     this.history = page.getByRole('region', { name: 'History' })
+    this.entries = this.history.getByRole('button')
+    this.historyPlaceholder = this.history.getByText('Your calculations will appear here')
   }
 
   async goto(): Promise<void> {

@@ -25,10 +25,13 @@ a few seconds while the API wakes up).
 - Enter or `=` commits: the result replaces the input (negatives as `(-5)`) and the
   calculation joins an in-memory history of the last 20 entries. `⌫` deletes one character;
   `C` or Escape clears.
-- Keypad with 44 px keys; on touch devices the keypad is the input method and the soft
-  keyboard stays hidden. From 48 rem wide the calculator is one centred panel with the
-  display across the top, the keypad on the left and History on the right, and keys and
-  type that scale with the window; narrower screens keep a single column.
+- Keypad whose keys grow with the screen height (44 px up to about 64 px on phones); on
+  touch devices the keypad is the input method and the soft keyboard stays hidden. From
+  48 rem wide the calculator is one centred panel (at most 72 rem) with the display across
+  the top and the width below it shared about 60/40 between the keypad on the left and
+  History on the right, so keys and type stretch with the window; History shows
+  "Your calculations will appear here" until the first commit. Narrower screens keep a
+  single column.
 - The input is focused when the page opens, and printable keys, Backspace and Escape reach
   it from anywhere on the page, so you can type without clicking first.
 - Lenient normalization: trailing operators and a trailing `.` are dropped, unmatched `(`
@@ -275,9 +278,10 @@ characters (closing parentheses added to a 1,024-character input).
   left to the browser. On dead-key layouts, a dead key pressed outside the input only moves
   focus into it, so the browser completes the accent sequence there. There are no other
   shortcuts.
-- Every keypad key is at least 44 × 44 px. Non-digit keys have accessible names ("divide",
-  "multiply", "backspace", …); the `sqrt` key is named "sqrt, square root" so the visible
-  label is part of the name (WCAG 2.5.3).
+- Every keypad key is at least 44 × 44 px at every viewport, growing with the window on
+  desktop and with the screen height on phones. Non-digit keys have accessible names
+  ("divide", "multiply", "backspace", …); the `sqrt` key is named "sqrt, square root" so
+  the visible label is part of the name (WCAG 2.5.3).
 - The live result is an `<output aria-live="polite">`; while typing, errors are polite
   status text. On commit, errors are announced with `role="alert"` and linked to the input
   with `aria-describedby`; the input is marked `aria-invalid` only for 400 and 422 responses.
@@ -754,9 +758,10 @@ in the order they were made.
   authoritative round trips with alerts. Evaluating in the browser was rejected because
   the backend owns the grammar and precision. The state machine is a pure reducer, tested
   exhaustively with fake timers; the hook owns the timers and the abort controller.
-- **Desktop panel and typing without a click** (spec decisions 37 and 38). Below 48 rem
-  the app is a phone calculator; above it, one centred device panel with the keypad left
-  and History right. The input is focused on load and keys pressed anywhere reach it,
+- **Desktop panel and typing without a click** (spec decisions 37, 38 and 41). Below
+  48 rem the app is a phone calculator; above it, one centred device panel with the keypad
+  left (about 60% of the width) and History right (about 40%, with a placeholder until the
+  first commit). The input is focused on load and keys pressed anywhere reach it,
   while buttons keep native Enter and Space and modifier or IME keys are never
   intercepted.
 - **A physical-calculator look with system fonts** (spec decision 40): dark LCD, keys

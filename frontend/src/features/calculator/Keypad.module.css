@@ -19,7 +19,8 @@
   --key-hover-highlight: var(--color-key-hover-highlight);
 
   min-width: var(--tap-target);
-  min-height: var(--tap-target);
+  /* Keys grow with the screen height so a tall phone is filled, never below 44px (decision 41). */
+  min-height: clamp(var(--tap-target), 6.5vh, 4rem);
   padding: var(--space-2);
   border: 1px solid var(--key-edge);
   border-radius: var(--radius-md);
@@ -83,15 +84,19 @@
   font-weight: 700;
 }
 
-/* Inside the desktop panel (decision 37) keys scale with the viewport, never below 44 px. */
+/*
+ * Inside the desktop panel (decisions 37 and 41) the keys stretch with their column, so
+ * their height follows the viewport height and their type the viewport width; neither
+ * drops below the phone size.
+ */
 @media (min-width: 48rem) {
   .keypad {
     gap: var(--space-3);
   }
 
   .key {
-    min-height: clamp(var(--tap-target), 8vh, 4rem);
-    font-size: clamp(1.125rem, 1.6vw, 1.5rem);
+    min-height: clamp(var(--tap-target), 8vh, 4.5rem);
+    font-size: clamp(1.125rem, 1.8vw, 1.75rem);
   }
 }
 

@@ -365,7 +365,12 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
   History on the right (the history column is reserved even while empty so the keypad does
   not move when the first entry appears). Key height, font sizes and spacing scale with the
   viewport (about 60 px keys on a laptop, never below 44 px) so the app fills a desktop
-  window instead of looking like a phone screen in its corner.
+  window instead of looking like a phone screen in its corner. Decision 41: the panel is
+  at most 72 rem wide and its width is shared, about 60% keypad and 40% History, so the
+  keys stretch with the window instead of leaving the rest of the panel empty; while there
+  is no history the right column shows a muted placeholder ("Your calculations will appear
+  here") instead of nothing. On phones the key height also scales with the viewport height
+  (44 px up to about 64 px) so the keypad fills a tall screen.
 
 - **Header**: title "Calculator".
 - **Display region**: labelled expression `<input>` (`maxLength=1024`, `autoComplete="off"`,
@@ -389,8 +394,9 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
   does not cover programmatic changes). `=` spans two columns in the last row. The document
   `<title>` is "Calculator".
 - **History**: list (`<ul>`) of buttons "2+2 = 4", newest first, max 20, heading "History";
-  hidden when empty; entries show the normalized expression and the raw result in full
-  (no truncation); every commit appends, duplicates included.
+  while empty the section shows only the heading and a muted placeholder line (decision
+  41); entries show the normalized expression and the raw result in full (no truncation);
+  every commit appends, duplicates included.
 - **States**: empty (blank result), typing (debounced request; previous result stays
   visible; "Calculating…" replaces it only if no response has arrived 300 ms after the
   request was sent), success, error, committing (`=` disabled, Enter ignored, same
@@ -504,6 +510,7 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
 | 31  | History duplicates                  | Always append                                                                                                                                                                                                                                                                                                                                                                                                                                  | 2026-09-17 |
 | 32  | Validation messages                 | Fixed templates per code (section 6), shown verbatim by the UI                                                                                                                                                                                                                                                                                                                                                                                 | 2026-09-17 |
 | 33  | Handler timeout                     | 503 problem `TIMEOUT`                                                                                                                                                                                                                                                                                                                                                                                                                          | 2026-09-17 |
+| 41  | Panel width and empty history       | The desktop panel (≤ 72 rem) shares its width about 60/40 between keypad and History so keys stretch with the window; an empty History shows its heading and a muted placeholder instead of nothing; phone key height scales with the viewport height (44–64 px)                                                                                                                                                                               | 2026-09-20 |
 | 40  | Visual style                        | "Physical calculator" look with system fonts: gradient page, device-body panel, dark LCD display, grouped keys with depth and press state, paper-tape history; all colours tokenised in both schemes                                                                                                                                                                                                                                           | 2026-09-20 |
 | 39  | `INVALID_NUMBER` wording            | The message quotes the offending number token (`234*0.%` → `invalid number '0.' at character 5`) so a reader sees the fault although the position stays at the token start; the dangling-dot rule (D-2) is kept                                                                                                                                                                                                                                | 2026-09-20 |
 | 38  | Keyboard focus                      | Input focused on load; printable keys, Backspace and Escape are routed to the input from the page background and from buttons; Enter/Space on a button stay native                                                                                                                                                                                                                                                                             | 2026-09-20 |

@@ -83,7 +83,7 @@ test.describe('evaluating and committing expressions', () => {
     await page.keyboard.press('Enter')
 
     await expect(calculator.input).toHaveValue('   ')
-    await expect(calculator.history).toHaveCount(0)
+    await expect(calculator.entries).toHaveCount(0)
     await expect(calculator.alert).toHaveCount(0)
   })
 })
@@ -213,6 +213,6 @@ test.describe('history', () => {
     await page.reload()
 
     await expect(calculator.input).toBeVisible()
-    await expect(calculator.history).toHaveCount(0)
+    await expect(calculator.entries).toHaveCount(0)
   })
 })

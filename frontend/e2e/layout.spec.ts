@@ -5,6 +5,9 @@ import { CalculatorPage } from './helpers.js'
 const LAPTOP_VIEWPORT = { width: 1280, height: 720 }
 const PHONE_VIEWPORT = { width: 412, height: 915 }
 const MIN_LAPTOP_KEY_HEIGHT_PX = 56
+/** Decision 41: the panel is shared about 60/40 between the keypad and History. */
+const MIN_KEYPAD_TO_HISTORY_RATIO = 1.3
+const MIN_KEYPAD_SHARE_OF_PANEL = 0.5
 
 async function box(locator: Locator) {
   const rect = await locator.boundingBox()
@@ -20,6 +23,14 @@ function keypad(calculator: CalculatorPage): Locator {
 /** The calculator panel: the only child of the main landmark. */
 function panel(page: Page): Locator {
   return page.getByRole('main').locator(':scope > *')
+}
+
+/** The width available to the panel's columns: its box minus borders and padding. */
+function innerWidth(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+  })
 }
 
 test.describe('desktop layout (decision 37)', () => {
@@ -44,6 +55,11 @@ test.describe('desktop layout (decision 37)', () => {
     // Their vertical ranges overlap: they sit side by side, not one above the other.
     expect(keys.y).toBeLessThan(history.y + history.height)
     expect(history.y).toBeLessThan(keys.y + keys.height)
+    // The keypad takes the larger share of the panel (decision 41).
+    expect(keys.width).toBeGreaterThanOrEqual(history.width * MIN_KEYPAD_TO_HISTORY_RATIO)
+    expect(keys.width).toBeGreaterThanOrEqual(
+      (await innerWidth(panel(page))) * MIN_KEYPAD_SHARE_OF_PANEL,
+    )
 
     // The display spans the panel above both columns.
     const input = await box(calculator.input)
@@ -52,16 +68,19 @@ test.describe('desktop layout (decision 37)', () => {
     expect(input.width).toBeGreaterThan(keys.width)
   })
 
-  test('the keypad does not move when the first history entry appears', async ({
+  test('the keypad does not move when the placeholder gives way to the first entry', async ({
     page,
   }, testInfo) => {
     await page.setViewportSize(LAPTOP_VIEWPORT)
     const calculator = new CalculatorPage(page, testInfo)
     await calculator.goto()
+    await expect(calculator.historyPlaceholder).toBeVisible()
+    await expect(calculator.entries).toHaveCount(0)
     const before = await box(keypad(calculator))
 
     await calculator.typeAndCommit('2+2')
     await expect(calculator.entry('2+2 = 4')).toBeVisible()
+    await expect(calculator.historyPlaceholder).toBeHidden()
 
     expect(await box(keypad(calculator))).toEqual(before)
   })

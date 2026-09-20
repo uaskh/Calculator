@@ -14,6 +14,14 @@ const output = () => screen.getByRole('status', { name: 'Result' })
 /** The polite message region below the result (the only unnamed status region). */
 const statusText = () => screen.getByRole('status', { name: '' })
 const key = (name: string) => screen.getByRole('button', { name })
+const historyRegion = () => screen.getByRole('region', { name: 'History' })
+
+/** History shows its heading and placeholder, and no entries, until the first commit. */
+function expectEmptyHistory() {
+  expect(within(historyRegion()).getByText('Your calculations will appear here')).toBeVisible()
+  expect(within(historyRegion()).queryByRole('list')).not.toBeInTheDocument()
+  expect(within(historyRegion()).queryByRole('button')).not.toBeInTheDocument()
+}
 
 /** Counts requests and records their expressions, keeping the default fake answers. */
 function trackRequests() {
@@ -345,7 +353,7 @@ describe('<Calculator />', () => {
       expect(input()).toHaveAttribute('aria-describedby', alert.id)
       expect(output()).toBeEmptyDOMElement()
       expect(document.activeElement).toBe(input())
-      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
+      expectEmptyHistory()
     })
 
     it('shows a committed validation error verbatim as an alert (FR-13.2)', async () => {
@@ -366,7 +374,7 @@ describe('<Calculator />', () => {
 
       if (text !== '') await user.type(input(), text)
       await user.keyboard('{Enter}')
-      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
+      expectEmptyHistory()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
       // The first request ever sent is the one for the next edit, not for the Enter.
@@ -374,7 +382,7 @@ describe('<Calculator />', () => {
       await waitFor(() => {
         expect(sent).toEqual([`${text}1`])
       })
-      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
+      expectEmptyHistory()
     })
 
     it('treats a committed EMPTY as a blank result with no alert and no history (FR-11.6)', async () => {
@@ -398,7 +406,7 @@ describe('<Calculator />', () => {
       expect(output()).toBeEmptyDOMElement()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(input()).not.toHaveAttribute('aria-invalid')
-      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
+      expectEmptyHistory()
     })
 
     it('re-enters a negative result as (-5), stores -5 in history and squares it to 25 (FR-11.8)', async () => {
@@ -880,11 +888,37 @@ describe('<Calculator />', () => {
   })
 
   describe('history (FR-14)', () => {
+    it('shows a placeholder until the first commit replaces it with the list (decision 41)', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      expect(
+        within(historyRegion()).getByRole('heading', { level: 2, name: 'History' }),
+      ).toBeVisible()
+      expectEmptyHistory()
+
+      await user.type(input(), '2+2')
+      await user.keyboard('{Enter}')
+      await waitFor(() => {
+        expect(input()).toHaveValue('4')
+      })
+
+      expect(
+        within(historyRegion()).getByRole('heading', { level: 2, name: 'History' }),
+      ).toBeVisible()
+      expect(
+        within(historyRegion()).queryByText('Your calculations will appear here'),
+      ).not.toBeInTheDocument()
+      expect(within(within(historyRegion()).getByRole('list')).getAllByRole('button')).toHaveLength(
+        1,
+      )
+      expect(screen.getByRole('button', { name: '2+2 = 4' })).toBeVisible()
+    })
+
     it('lists commits newest first and reloads an entry through the live path (FR-14.1, FR-14.2)', async () => {
       const sent = trackRequests()
       const user = userEvent.setup()
       renderWithProviders(<Calculator />)
-      expect(screen.queryByRole('region', { name: 'History' })).not.toBeInTheDocument()
+      expectEmptyHistory()
 
       await user.type(input(), '2+2')
       await user.keyboard('{Enter}')

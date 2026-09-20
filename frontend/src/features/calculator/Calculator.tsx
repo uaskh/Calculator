@@ -143,7 +143,7 @@ export function Calculator() {
           />
         </div>
       </form>
-      {/* Reserves the history column on desktop even while History renders nothing. */}
+      {/* The right column on desktop; History fills it with a placeholder while empty. */}
       <div className={styles.historyColumn}>
         <History
           entries={state.history}

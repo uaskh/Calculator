@@ -1,9 +1,10 @@
 /*
  * The calculator is one "device body" panel at every width. Phones: one column (display,
  * keypad, history). From the tablet breakpoint (48rem, see tokens.css) the display spans
- * the top, the keypad sits in a fixed-width left column and History fills the right
- * column, which is reserved even while History is empty so the keypad never moves
- * (spec §7 "Layout", decision 37).
+ * the top and the panel's width is shared about 60/40 between the keypad column and the
+ * History column, so the keys stretch with the window. History always renders (a
+ * placeholder while empty), so the keypad never moves when the first entry appears
+ * (spec §7 "Layout", decisions 37 and 41).
  */
 .calculator {
   display: grid;
@@ -61,11 +62,6 @@
 .keypadColumn,
 .historyColumn {
   min-width: 0;
-}
-
-/* History renders nothing while empty; an empty column must not add a grid gap on phones. */
-.historyColumn:empty {
-  display: none;
 }
 
 .label {
@@ -173,11 +169,11 @@
 
 @media (min-width: 48rem) {
   .calculator {
-    grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     grid-template-rows: auto auto;
     align-items: start;
     gap: var(--space-6) var(--space-8);
-    max-width: 64rem;
+    max-width: var(--content-max);
     margin-inline: auto;
     padding: var(--space-6);
     border-radius: var(--radius-xl);

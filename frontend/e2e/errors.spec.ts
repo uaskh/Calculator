@@ -37,7 +37,7 @@ test.describe('arithmetic and validation errors', () => {
     await expect(calculator.input).toHaveAttribute('aria-invalid', 'true')
     await expect(calculator.input).toBeFocused()
     await expect(calculator.result).toHaveText('')
-    await expect(calculator.history).toHaveCount(0)
+    await expect(calculator.entries).toHaveCount(0)
     const describedBy = await calculator.input.getAttribute('aria-describedby')
     expect(describedBy).not.toBeNull()
     await expect(calculator.alert).toHaveAttribute('id', describedBy ?? '')
@@ -85,7 +85,7 @@ test.describe('arithmetic and validation errors', () => {
     await expect(calculator.result).toHaveText('')
     await expect(calculator.status).toHaveText('')
     await expect(calculator.alert).toHaveCount(0)
-    await expect(calculator.history).toHaveCount(0)
+    await expect(calculator.entries).toHaveCount(0)
   })
 })
 
@@ -111,7 +111,7 @@ test.describe('service failures', () => {
     await expect(calculator.input).toHaveValue('2+2')
     await expect(calculator.input).not.toHaveAttribute('aria-invalid', 'true')
     await expect(calculator.input).toBeFocused()
-    await expect(calculator.history).toHaveCount(0)
+    await expect(calculator.entries).toHaveCount(0)
   })
 
   test('a network failure is reported the same way', async ({ page }, testInfo) => {

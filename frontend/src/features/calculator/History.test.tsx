@@ -4,11 +4,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { History } from './History'
 
 describe('<History />', () => {
-  it('renders nothing while there are no entries (FR-14.1)', () => {
-    const { container } = render(<History entries={[]} onActivate={vi.fn()} />)
+  it('renders the heading and a placeholder while there are no entries (FR-14.1, decision 41)', () => {
+    render(<History entries={[]} onActivate={vi.fn()} />)
 
-    expect(container).toBeEmptyDOMElement()
-    expect(screen.queryByRole('heading', { name: 'History' })).not.toBeInTheDocument()
+    const section = screen.getByRole('region', { name: 'History' })
+    expect(within(section).getByRole('heading', { level: 2, name: 'History' })).toBeInTheDocument()
+    expect(within(section).getByText('Your calculations will appear here')).toBeVisible()
+    expect(within(section).queryByRole('list')).not.toBeInTheDocument()
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('lists entries as "expression = result" buttons in the given order under a heading (FR-14.1)', () => {
@@ -30,6 +33,9 @@ describe('<History />', () => {
       '2+2 = 4',
     ])
     expect(within(section).getByRole('list')).toBeInTheDocument()
+    expect(
+      within(section).queryByText('Your calculations will appear here'),
+    ).not.toBeInTheDocument()
   })
 
   it('shows long expressions and results in full (FR-14.5)', () => {
