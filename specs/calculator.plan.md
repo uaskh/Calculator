@@ -45,7 +45,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | FR-7.6 | API | `UNKNOWN_FUNCTION` maximal ASCII-letter runs (§5) | `foo(1)`→0 `unknown function 'foo' at character 1`; `2x`→1; `1e5`→1; `sqrtx(4)`→0 | Must | `TestValidation` |
 | FR-7.7 | API | `TOO_LONG` > 1,024 code points before normalization (§5) | 1,025→`TOO_LONG` `expression exceeds 1,024 characters`, no position; 1,024→accepted; spaces count | Must | `TestValidation/limits` |
 | FR-7.8 | API | `TOO_DEEP` > 32 nested `(`/`sqrt(` (§5) | 33 pairs→`TOO_DEEP` `expression is nested deeper than 32 levels`, no position; 32→200; 33 nested `sqrt(`→`TOO_DEEP`; 32 `(`+`1` unclosed→200 | Must | `TestValidation/limits` |
-| FR-7.9 | API | Validation problem shape (§4, §6) | `code:"VALIDATION_FAILED"`, `status:400`, exactly one `errors[]` entry, `detail == errors[0].message`, `application/problem+json` | Must | `TestEvaluateHandler`, e2e |
+| FR-7.9 | API | Validation problem shape (§4, §6) | `code:"VALIDATION_FAILED"`, `status:400`, exactly one `errors[]` entry, `detail == errors[0].message`, `application/problem+json` | Must | `TestEvaluateHandler`, `TestEvaluate_Examples` |
 | FR-7.10 | Domain | Validation order (§5) | 1,025 chars containing `$`→`TOO_LONG`; `2+$`→`INVALID_CHARACTER` at 2; `$`→`INVALID_CHARACTER`; 33 pairs + extra `)`→`TOO_DEEP` | Must | `TestValidation/order` |
 | FR-7.11 | API | `null`/missing → `REQUIRED`; non-string → `MALFORMED_REQUEST` (§6) | `{}`, `{"expression":null}`→400 `VALIDATION_FAILED` `REQUIRED` `expression is required`; `{"expression":2}`→400 `MALFORMED_REQUEST` | Must | `TestEvaluateHandler` |
 | FR-8.1 | Domain | `DIVISION_BY_ZERO` incl. `0^negative` (§4, §5) | `1/0`, `0/0`, `5/0%`, `0^-1`, `10^99/10^-99`→422 | Must | `TestArithmeticErrors` |
@@ -67,8 +67,8 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | FR-10.2 | UI | Taps append ASCII tokens; `sqrt` inserts `sqrt(` (§4) | `7 × ( 2 + 1 )`→`7*(2+1)`, live `21`; `sqrt 1 6 )`→`sqrt(16)`, `4` | Must | `Calculator.test.tsx › keypad` |
 | FR-10.3 | UI | Keys append at the end, caret at end, focus stays on input (§7) | Caret at 0 in `12`, tap `3`→`123`, caret 3, input focused | Must | `Calculator.test.tsx › keypad focus` |
 | FR-10.4 | UI | Insert exceeding 1,024 characters ignored (§7) | 1,020 chars + `sqrt`→unchanged; 1,023 + `1`→1,024; then `1`→unchanged | Must | `model.test.ts › insertKey` |
-| FR-10.5 | UI | Every key ≥ 44×44 px, Tab reaches each (§4, NFR-1) | Playwright bounding boxes on both projects; Tab order | Must | `e2e/accessibility.spec.ts` |
-| FR-11.1 | UI | `=`/Enter commits; result replaces the expression (§4) | `2+2` Enter → input `4`, history `2+2 = 4`; `*3` Enter → `12`; `=` click identical | Must | `Calculator.test.tsx › commit`, `e2e/calculator.spec.ts` |
+| FR-10.5 | UI | Every key ≥ 44×44 px, Tab reaches each (§4, NFR-1) | Playwright bounding boxes on both projects; Tab order | Must | `e2e/accessibility.spec.ts › tap targets`, `e2e/keyboard.spec.ts › all keypad buttons` |
+| FR-11.1 | UI | `=`/Enter commits; result replaces the expression (§4) | `2+2` Enter → input `4`, history `2+2 = 4`; `*3` Enter → `12`; `=` click identical | Must | `Calculator.test.tsx › commit`, `e2e/calculator.spec.ts › live result and commit` |
 | FR-11.2 | UI | Commit error → alert, input kept (§4) | `1/0` `=` → alert `Cannot divide by zero.`, input `1/0` | Must | `Calculator.test.tsx › commit error` |
 | FR-11.3 | UI | Normalized expression and result added to history (§4, D20) | `2*(3+4` `=` → input `14`, history `2*(3+4) = 14` | Must | `Calculator.test.tsx › commit` |
 | FR-11.4 | UI | During commit `=` disabled, Enter ignored; commit cancels debounce, aborts live, sends its own (§4, D23) | Pending debounce + `=` → one POST; live aborted; second Enter sends nothing; `=` disabled | Must | `useCalculator.test.ts › commit`, `Calculator.test.tsx` |
@@ -90,13 +90,13 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | FR-14.1 | UI | History list, heading "History", newest first, hidden when empty (§4, §7) | No list before first commit; after `2+2`, `3*3` → `3*3 = 9` above `2+2 = 4` | Should | `History.test.tsx`, `Calculator.test.tsx` |
 | FR-14.2 | UI | Activating an entry loads it, caret at end, focus, live result via debounce (§4) | Click → input `2+2`, `selectionStart 3`, focused, one POST after 150 ms, `4` | Should | `Calculator.test.tsx › history` |
 | FR-14.3 | UI | 21st commit drops the oldest (§4, D8) | 21 commits → 20 entries | Should | `model.test.ts › history` |
-| FR-14.4 | UI | Reload empties history (§4) | Playwright reload → no list | Should | `e2e/calculator.spec.ts` |
+| FR-14.4 | UI | Reload empties history (§4) | Playwright reload → no list | Should | `e2e/calculator.spec.ts › reload empties history` |
 | FR-14.5 | UI | Entries show full text (§7) | 100-digit result complete in entry | Should | `History.test.tsx` |
-| FR-15.1 | API | `GET /healthz` → 200 `{"status":"ok"}` (§4, §6) | Body, `Cache-Control: no-store`, `X-Request-ID` | Must | `TestHealth`, e2e |
+| FR-15.1 | API | `GET /healthz` → 200 `{"status":"ok"}` (§4, §6) | Body, `Cache-Control: no-store`, `X-Request-ID` | Must | `TestHealthEndpoints` |
 | FR-15.2 | API | `GET /readyz` 200 / 503 `NOT_READY` during shutdown (§4) | Flag unset → 200 `{"status":"ok"}`; set → 503 `NOT_READY` | Must | `TestReadiness` |
 | FR-15.3 | Backend | Flag flips on SIGTERM/SIGINT before the server stops (§4) | Cancel ctx → `BeginShutdown` called before `srv.Shutdown`; in-flight request completes | Must | `TestServe_Shutdown`, `TestApp_Readiness` |
 | API-1 | API | Single `POST /api/v1/evaluate`; 404/405 problems (§6, D3) | 200 example; `GET`→405 with `Allow`; `/api/v1/nope`→404 | Must | `TestEvaluateHandler`, e2e |
-| API-2 | API | `X-Request-ID` and `Cache-Control: no-store` on every response (§6) | Asserted on 200, 400, 404, 405, 413, 415, 422, 500, 503 | Must | `TestMiddleware`, e2e |
+| API-2 | API | `X-Request-ID` and `Cache-Control: no-store` on every response (§6) | Asserted on 200, 400, 404, 405, 413, 415, 422, 500, 503 | Must | `TestSecurityHeaders`, `TestEvaluate_Examples` |
 | API-3 | API | Request ID: 32 hex from `crypto/rand`; echo `^[A-Za-z0-9._-]{1,64}$` (§6) | None→`^[0-9a-f]{32}$`; `abc.DEF_1-2`→echoed; 65 chars, space, `é`→replaced | Must | `TestRequestID` |
 | API-4 | API | `mime.ParseMediaType`; exactly `application/json` (§6) | `application/json; charset=utf-8` ok; `text/plain`, missing, `application/problem+json`→415 | Must | `TestDecodeJSON` |
 | API-5 | API | `MALFORMED_REQUEST` cases (§6) | `{bad`, `{"expression":2}`, unknown field, two objects, empty, `[]`, `null`→400 | Must | `TestDecodeJSON`, `TestEvaluateHandler` |
@@ -107,13 +107,13 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | API-10 | API | CORS off by default; `*` rejected; echo + `Vary`; preflight headers (§6) | `Load` with `*`→error; allowed origin echoed with `Vary: Origin`; other origin nothing; preflight `GET, POST` / `Content-Type, X-Request-ID` / `600` | Must | `TestConfig`, `TestCORS` |
 | API-11 | Docs | OpenAPI 3.1 contract incl. result pattern (§6) | Schemas, examples, every problem response, `code` enums | Must | review, README |
 | UI-1 | UI | Title "Calculator", document title (§7) | h1 and `document.title` | Must | `App.test.tsx` |
-| UI-2 | UI | `inputMode` none on coarse pointer, text otherwise (§7, D25) | `matchMedia` mocked; Pixel 7 project → `none`; desktop → `text` | Must | `Calculator.test.tsx`, e2e |
-| UI-3 | UI | `<output aria-live=polite>`; monospace, single-line, horizontal scroll; 118 chars intact (§7) | `<output>` present; long result fully in DOM; no page overflow | Must | `Calculator.test.tsx`, `e2e/responsive.spec.ts` |
+| UI-2 | UI | `inputMode` none on coarse pointer, text otherwise (§7, D25) | `matchMedia` mocked; Pixel 7 project → `none`; desktop → `text` | Must | `Calculator.test.tsx`, `e2e/calculator.spec.ts › inputmode` |
+| UI-3 | UI | `<output aria-live=polite>`; monospace, single-line, horizontal scroll; 118 chars intact (§7) | `<output>` present; long result fully in DOM; no page overflow | Must | `Calculator.test.tsx`, `e2e/responsive.spec.ts › 118-char result` |
 | UI-4 | UI | Only Enter/Escape shortcuts; native Backspace (§7) | Backspace mid-text deletes before caret only | Must | `Calculator.test.tsx › keyboard` |
 | UI-5 | UI | Errors never move focus (§7) | Focus stays on input after a commit error | Must | `Calculator.test.tsx › focus` |
-| UI-6 | UI | Theme via `prefers-color-scheme`; contrast ≥ 4.5:1 by unit test and axe; reduced motion (§7) | `contrast.test.ts` over `tokens.css` pairs; axe in light and dark | Must | `contrast.test.ts`, `e2e/accessibility.spec.ts` |
-| NFR-1 | A11y | WCAG 2.2 AA; 44 px targets; zero axe violations on both projects (§8) | axe in idle, result, error, history states | Must | `e2e/accessibility.spec.ts` |
-| NFR-2 | Responsive | No page-level horizontal scroll at 320, 412, 1280 px (§8) | `scrollWidth <= innerWidth` with a 118-char result and 1,024-char input | Must | `e2e/responsive.spec.ts` |
+| UI-6 | UI | Theme via `prefers-color-scheme`; contrast ≥ 4.5:1 by unit test and axe; reduced motion (§7) | `contrast.test.ts` over `tokens.css` pairs; axe in light and dark | Must | `contrast.test.ts`, `e2e/accessibility.spec.ts › dark scheme` |
+| NFR-1 | A11y | WCAG 2.2 AA; 44 px targets; zero axe violations on both projects (§8) | axe in idle, result, error, history states | Must | `e2e/accessibility.spec.ts › axe (four states, light/dark/reduced motion)` |
+| NFR-2 | Responsive | No page-level horizontal scroll at 320, 412, 1280 px (§8) | `scrollWidth <= innerWidth` with a 118-char result and 1,024-char input | Must | `e2e/responsive.spec.ts › no page overflow at 320/412/1280` |
 | NFR-3 | Quality | Layers, fuzz, coverage 80/90, `docs/coverage.md` (§8) | `make coverage` passes | Must | `make coverage` |
 | NFR-4 | Perf | Single-pass parser; benchmark corpus < 5 ms each; numbers in `docs/coverage.md` (§8) | `BenchmarkEvaluate/<case>` | Must | `bench_test.go`, review |
 | NFR-5 | Security | Server-side validation, limits, headers, same-origin `/api` (§8) | API-9/10; Vite and nginx proxies | Must | as above |
@@ -170,6 +170,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | A-31 | A parse error on a `)` that normalization appended (`(sqrt`) is reported as "unexpected end of input" with Position = input length, since no real character exists to quote | Consistent with A-7 |
 | A-32 | D-2 applies to the last token of the trimmed input even inside an open group: `(2.` → expression "(2)" = 2, `2 .` → "2"; two dots anywhere stay INVALID_NUMBER | Literal reading of D-2 and the "single trailing `.`" rule |
 | A-33 | Operator and function tables panic on an invalid or duplicate registration at construction time (like `http.ServeMux` duplicate patterns); this is invariant checking, not control flow | Tables are built once in `New()` and covered by tests |
+| A-34 | nginx serves the shell with the five spec headers plus the template CSP (`default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`) and hides the API's copies on proxied responses; `frontend/e2e` is type-checked with the DOM lib in `tsconfig.node.json` | Spec asks for `default-src 'self'` on the shell; the extra directives only tighten it |
 | A-27 | Ports: API 8080, Vite 5173, containers web 3000; Playwright uses 18080/14173 | Clarification guide defaults |
 
 ## 3. Architecture
@@ -304,10 +305,10 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - [x] T-15 (UI-6, NFR-2) tokens, contrast test, responsive polish; typecheck, lint, coverage, build; commit `feat(web): …`
 
 ### Phase 6: Integration and end-to-end
-- [ ] T-16 Black-box API journeys (`backend/test/e2e`)
-- [ ] T-17 Playwright: calculator, errors, keyboard, mobile keypad, history, accessibility (axe, tap sizes), responsive
-- [ ] T-18 Manual check: `make dev`, curl every endpoint, screenshots 375×812 and 1280×800
-- [ ] T-19 Containers: `docker compose up --build --wait`, smoke through :3000 (D-6); commit `test(e2e): …`
+- [x] T-16 Black-box API journeys (`backend/test/e2e`)
+- [x] T-17 Playwright: calculator, errors, keyboard, mobile keypad, history, accessibility (axe, tap sizes), responsive
+- [x] T-18 Manual check: `make dev`, curl every endpoint, screenshots 375×812 and 1280×800
+- [x] T-19 Containers: `docker compose up --build --wait`, smoke through :3000 (D-6); commit `test(e2e): …`
 
 ### Phase 7: Verify, review, document
 - [ ] Full verification (`/verify full`)
@@ -338,4 +339,5 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - 2026-09-18: Phase 0–1 complete (toolchain, guardrail edits, clarifications D-1..D-8).
 - 2026-09-18: Phase 2 complete, commit `0a2322c` (`docs(plan): add calculator implementation plan`).
 - 2026-09-18: Phase 3 complete, commit `7c8ec42` (`chore: scaffold backend and frontend`).
+- 2026-09-18: Phase 4 complete, commit `6cc04bd` (`feat(api): add expression evaluation endpoint and calculator domain`); decision D-9 recorded.
 - 2026-09-18: Phase 5 complete, commit `831249c` (`feat(web): add calculator feature with live preview, keypad and history`).

@@ -2,7 +2,6 @@
 package e2e
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -17,22 +16,15 @@ import (
 	"github.com/aksh/calculator/backend/internal/config"
 )
 
-// stubEvaluator stands in for the calculator domain until internal/calc is wired; the
-// tests here cover the transport contract only (health, readiness, errors, headers).
-type stubEvaluator struct{}
-
-func (stubEvaluator) Evaluate(_ context.Context, expression string) (calc.Result, error) {
-	return calc.Result{Expression: expression, Value: "0"}, nil
-}
-
-// newApp wires the real handler graph and serves it on a loopback port.
+// newApp wires the real handler graph, including the real calculator domain, and serves
+// it on a loopback port.
 func newApp(t *testing.T, env map[string]string) (*app.App, *httptest.Server) {
 	t.Helper()
 	cfg, err := config.Load(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	a := app.New(cfg, slog.New(slog.DiscardHandler), stubEvaluator{})
+	a := app.New(cfg, slog.New(slog.DiscardHandler), calc.New())
 	srv := httptest.NewServer(a.Handler)
 	t.Cleanup(srv.Close)
 	return a, srv
