@@ -36,20 +36,20 @@ Measured by `go test -bench=BenchmarkEvaluate` on this machine; CI runs the same
 
 | Case | ns/op | ms/op |
 |---|---:|---:|
-| `literal_1024_digits` | 16562 | 0.017 |
-| `fraction_1022_digits` | 16936 | 0.017 |
-| `pow_1.0001^1000` | 6726 | 0.007 |
-| `pow_nested_(1.0001^1000)^1000` | 13733 | 0.014 |
-| `pow_precheck_reject_(1.1^1000)^1000` | 6437 | 0.006 |
-| `pow_chain_2^0.5_x32` | 194833 | 0.195 |
-| `sqrt_chain_x32` | 71376 | 0.071 |
-| `nesting_depth_32` | 19275 | 0.019 |
-| `largest_integer_power_2^332` | 3248 | 0.003 |
-| `pow_99^50` | 2598 | 0.003 |
-| `pow_9^999.5` | 2981 | 0.003 |
-| `pow_large_fractional_(10^99)^0.999` | 19700 | 0.020 |
-| `pow_fractional_chain_0.5^0.5_x255` | 1289757 | 1.290 |
-| `pow_fractional_chain_2^0.5_x255` | 1295441 | 1.295 |
-| `pow_fractional_chain_0.7^0.7_x255` | 2225194 | 2.225 |
+| `literal_1024_digits` | 29678 | 0.030 |
+| `fraction_1022_digits` | 27675 | 0.028 |
+| `pow_1.0001^1000` | 10972 | 0.011 |
+| `pow_nested_(1.0001^1000)^1000` | 20470 | 0.020 |
+| `pow_precheck_reject_(1.1^1000)^1000` | 9652 | 0.010 |
+| `pow_chain_2^0.5_x32` | 238075 | 0.238 |
+| `sqrt_chain_x32` | 77801 | 0.078 |
+| `nesting_depth_32` | 17998 | 0.018 |
+| `largest_integer_power_2^332` | 3147 | 0.003 |
+| `pow_99^50` | 2554 | 0.003 |
+| `pow_9^999.5` | 2870 | 0.003 |
+| `pow_large_fractional_(10^99)^0.999` | 20018 | 0.020 |
+| `pow_fractional_chain_0.5^0.5_x255` | 1225403 | 1.225 |
+| `pow_fractional_chain_2^0.5_x255` | 1233784 | 1.234 |
+| `pow_fractional_chain_0.7^0.7_x255` | 2128657 | 2.129 |
 
 **Benchmark limit: 5 ms per case (met).**
