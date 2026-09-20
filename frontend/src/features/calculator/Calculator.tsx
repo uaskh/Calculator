@@ -1,10 +1,11 @@
-import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { flushSync } from 'react-dom'
 import styles from './Calculator.module.css'
 import { History } from './History'
 import { Keypad } from './Keypad'
 import { MAX_EXPRESSION_LENGTH } from './model'
 import { useCalculator } from './useCalculator'
+import { useTypeAnywhere } from './useTypeAnywhere'
 
 /** Touch devices get no soft keyboard: the keypad is the input method (spec §7, D25). */
 function hasCoarsePointer(): boolean {
@@ -12,7 +13,8 @@ function hasCoarsePointer(): boolean {
 }
 
 export function Calculator() {
-  const { state, edit, pressKey, backspace, clear, commit, activateHistory } = useCalculator()
+  const { state, edit, pressKey, typeCharacter, backspace, clear, commit, activateHistory } =
+    useCalculator()
   const inputRef = useRef<HTMLInputElement>(null)
   const inputId = useId()
   const alertId = useId()
@@ -37,11 +39,36 @@ export function Calculator() {
     focusInputAtEnd()
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function commitAndFocus() {
     commit()
     inputRef.current?.focus()
   }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    commitAndFocus()
+  }
+
+  // The input is focused on load so typing works without a click (decision 38). An effect
+  // rather than the `autoFocus` attribute: jsx-a11y forbids the attribute (no-autofocus).
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useTypeAnywhere({
+    onCharacter: (character) => {
+      applyAndFocus(() => {
+        typeCharacter(character)
+      })
+    },
+    onBackspace: () => {
+      applyAndFocus(backspace)
+    },
+    onClear: () => {
+      applyAndFocus(clear)
+    },
+    onCommit: commitAndFocus,
+  })
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Escape') return
@@ -97,29 +124,34 @@ export function Calculator() {
             </p>
           )}
         </div>
-        <Keypad
-          committing={committing}
-          onKey={(key) => {
+        <div className={styles.keypadColumn}>
+          <Keypad
+            committing={committing}
+            onKey={(key) => {
+              applyAndFocus(() => {
+                pressKey(key)
+              })
+            }}
+            onBackspace={() => {
+              applyAndFocus(backspace)
+            }}
+            onClear={() => {
+              applyAndFocus(clear)
+            }}
+          />
+        </div>
+      </form>
+      {/* Reserves the history column on desktop even while History renders nothing. */}
+      <div className={styles.historyColumn}>
+        <History
+          entries={state.history}
+          onActivate={(index) => {
             applyAndFocus(() => {
-              pressKey(key)
+              activateHistory(index)
             })
           }}
-          onBackspace={() => {
-            applyAndFocus(backspace)
-          }}
-          onClear={() => {
-            applyAndFocus(clear)
-          }}
         />
-      </form>
-      <History
-        entries={state.history}
-        onActivate={(index) => {
-          applyAndFocus(() => {
-            activateHistory(index)
-          })
-        }}
-      />
+      </div>
     </div>
   )
 }

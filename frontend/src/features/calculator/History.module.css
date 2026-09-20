@@ -33,3 +33,15 @@
 .entry:hover {
   background: var(--color-border);
 }
+
+/* Inside the desktop panel (decision 37) entries sit on the panel surface. */
+@media (min-width: 48rem) {
+  .heading {
+    font-size: clamp(var(--text-lg), 1.6vw, 1.5rem);
+  }
+
+  .entry {
+    background: var(--color-bg);
+    font-size: clamp(var(--text-md), 1.3vw, var(--text-lg));
+  }
+}

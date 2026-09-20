@@ -1,3 +1,9 @@
+/*
+ * Phones: one column (display, keypad, history). From the tablet breakpoint (48rem, see
+ * tokens.css) the calculator is one centred panel: the display spans the top, the keypad
+ * sits in a fixed-width left column and History fills the right column, which is reserved
+ * even while History is empty so the keypad never moves (spec §7 "Layout", decision 37).
+ */
 .calculator {
   display: grid;
   gap: var(--space-6);
@@ -14,6 +20,16 @@
   display: grid;
   gap: var(--space-2);
   min-width: 0;
+}
+
+.keypadColumn,
+.historyColumn {
+  min-width: 0;
+}
+
+/* History renders nothing while empty; an empty column must not add a grid gap on phones. */
+.historyColumn:empty {
+  display: none;
 }
 
 .label {
@@ -76,9 +92,49 @@
   font-weight: 600;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 48rem) {
   .calculator {
-    grid-template-columns: minmax(0, 28rem) minmax(0, 1fr);
+    grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+    grid-template-rows: auto auto;
     align-items: start;
+    gap: var(--space-6) var(--space-8);
+    max-width: 64rem;
+    margin-inline: auto;
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+
+  /* The form is only a submission boundary here; its children join the panel grid. */
+  .form {
+    display: contents;
+  }
+
+  .display {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    gap: var(--space-3);
+  }
+
+  .keypadColumn {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .historyColumn {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .input {
+    min-height: clamp(var(--tap-target), 6vh, 3.5rem);
+    font-size: clamp(var(--text-lg), 1.8vw, 1.75rem);
+  }
+
+  .output {
+    min-height: clamp(3rem, 8vh, 4.5rem);
+    background: var(--color-bg);
+    font-size: clamp(1.5rem, 2.5vw, 2.5rem);
   }
 }

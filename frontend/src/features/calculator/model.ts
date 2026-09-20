@@ -74,6 +74,7 @@ export interface CalculatorState {
 export type CalculatorEvent =
   | { type: 'edited'; text: string }
   | { type: 'keyPressed'; key: KeypadKey }
+  | { type: 'characterTyped'; character: string }
   | { type: 'backspace' }
   | { type: 'cleared' }
   | { type: 'commitRequested' }
@@ -99,10 +100,15 @@ export const initialState: CalculatorState = {
 
 const codePointLength = (text: string): number => [...text].length
 
-/** Appends a keypad token; an insert that would exceed the length limit is ignored. */
-export function insertKey(expression: string, key: KeypadKey): string {
-  const next = expression + (KEY_TOKENS[key] ?? key)
+/** Appends text at the end; an insert that would exceed the length limit is ignored. */
+export function appendText(expression: string, text: string): string {
+  const next = expression + text
   return codePointLength(next) > MAX_EXPRESSION_LENGTH ? expression : next
+}
+
+/** Appends a keypad token (`sqrt` opens its call) under the same length rule as `appendText`. */
+export function insertKey(expression: string, key: KeypadKey): string {
+  return appendText(expression, KEY_TOKENS[key] ?? key)
 }
 
 /** Removes the last code point (`sqrt(` → `sqrt`); an empty expression stays empty. */
@@ -190,6 +196,10 @@ export function calculatorReducer(state: CalculatorState, event: CalculatorEvent
       return edited(state, event.text)
     case 'keyPressed': {
       const next = insertKey(state.expression, event.key)
+      return next === state.expression ? state : edited(state, next)
+    }
+    case 'characterTyped': {
+      const next = appendText(state.expression, event.character)
       return next === state.expression ? state : edited(state, next)
     }
     case 'backspace':

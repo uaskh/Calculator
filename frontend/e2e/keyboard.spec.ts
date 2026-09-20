@@ -2,6 +2,53 @@ import { expect, test } from '@playwright/test'
 import { CalculatorPage, focusedName, KEYPAD_NAMES, tabTo } from './helpers.js'
 
 test.describe('keyboard-only use', () => {
+  test('typing works as soon as the page opens, without a click (decision 38)', async ({
+    page,
+  }, testInfo) => {
+    const calculator = new CalculatorPage(page, testInfo)
+    await page.goto('/')
+    await expect(calculator.input).toBeFocused()
+
+    await page.keyboard.type('2+2')
+    await expect(calculator.input).toHaveValue('2+2')
+    await expect(calculator.result).toHaveText('4')
+
+    await page.keyboard.press('Enter')
+    await expect(calculator.input).toHaveValue('4')
+    await expect(calculator.entry('2+2 = 4')).toBeVisible()
+  })
+
+  test('keys pressed on the page background or on a button reach the input (decision 38)', async ({
+    page,
+  }, testInfo) => {
+    const calculator = new CalculatorPage(page, testInfo)
+    await calculator.goto()
+    await calculator.type('2+')
+    await tabTo(page, calculator.key('add'))
+
+    await page.keyboard.type('3')
+    await expect(calculator.input).toHaveValue('2+3')
+    await expect(calculator.input).toBeFocused()
+    expect(await calculator.caretAtEnd()).toBe(true)
+
+    await page.locator('body').click({ position: { x: 1, y: 1 } })
+    await expect(calculator.input).not.toBeFocused()
+    await page.keyboard.press('Backspace')
+    await expect(calculator.input).toHaveValue('2+')
+    await expect(calculator.input).toBeFocused()
+
+    await page.locator('body').click({ position: { x: 1, y: 1 } })
+    await page.keyboard.type('4')
+    await page.keyboard.press('Enter')
+    await expect(calculator.input).toHaveValue('6')
+    await expect(calculator.entry('2+4 = 6')).toHaveCount(1)
+
+    await page.locator('body').click({ position: { x: 1, y: 1 } })
+    await page.keyboard.press('Escape')
+    await expect(calculator.input).toHaveValue('')
+    await expect(calculator.input).toBeFocused()
+  })
+
   test('types, commits with Enter and clears with Escape without a pointer', async ({
     page,
   }, testInfo) => {

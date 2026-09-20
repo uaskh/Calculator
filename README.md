@@ -21,7 +21,11 @@ command in containers.
   calculation joins an in-memory history of the last 20 entries. `⌫` deletes one character;
   `C` or Escape clears.
 - Keypad with 44 px keys; on touch devices the keypad is the input method and the soft
-  keyboard stays hidden.
+  keyboard stays hidden. From 48 rem wide the calculator is one centred panel with the
+  display across the top, the keypad on the left and History on the right, and keys and
+  type that scale with the window; narrower screens keep a single column.
+- The input is focused when the page opens, and printable keys, Backspace and Escape reach
+  it from anywhere on the page, so you can type without clicking first.
 - Lenient normalization: trailing operators and a trailing `.` are dropped, unmatched `(`
   are closed, and the evaluated expression is echoed ("Evaluated as 2*(3+4)").
 - Every error is machine-readable: RFC 9457 problem details with a stable `code` and, for
@@ -231,9 +235,13 @@ characters (closing parentheses added to a 1,024-character input).
 
 ## Keyboard and accessibility
 
-- Type the expression directly; Enter commits, Escape clears (both while the input has
-  focus). Tab reaches every key; focus returns to the input after keypad taps, `=`, `C` and
-  history activation. There are no other shortcuts.
+- The expression input has focus when the page opens. Type the expression directly; Enter
+  commits, Escape clears. When focus is on the page background or on a keypad or history
+  button, printable characters, Backspace and Escape are routed to the input (appended at
+  the end) and Enter on the background commits; Enter and Space on a button activate that
+  button as usual. Tab order is unchanged: Tab reaches every key, and focus returns to the
+  input after keypad taps, `=`, `C` and history activation. Keys with Ctrl, Alt or Cmd are
+  left to the browser. There are no other shortcuts.
 - Every keypad key is at least 44 × 44 px. Non-digit keys have accessible names ("divide",
   "multiply", "backspace", …); the `sqrt` key is named "sqrt, square root" so the visible
   label is part of the name (WCAG 2.5.3).
@@ -244,7 +252,7 @@ characters (closing parentheses added to a 1,024-character input).
   (checked by a unit test over the design tokens and by axe in the browser suite).
   Transitions are disabled under `prefers-reduced-motion`.
 - Long inputs and results scroll horizontally inside their fields; the page never scrolls
-  sideways at 320 px, 412 px or 1280 px.
+  sideways at 320 px, 412 px, 1280 px or 1920 px.
 
 ## API
 

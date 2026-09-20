@@ -40,6 +40,23 @@
   filter: brightness(1.1);
 }
 
+/* Inside the desktop panel (decision 37) keys scale with the viewport, never below 44 px. */
+@media (min-width: 48rem) {
+  .keypad {
+    gap: var(--space-3);
+  }
+
+  .key {
+    min-height: clamp(var(--tap-target), 8vh, 4rem);
+    background: var(--color-bg);
+    font-size: clamp(1.125rem, 1.6vw, 1.5rem);
+  }
+
+  .equals {
+    background: var(--color-accent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .key {
     transition: none;

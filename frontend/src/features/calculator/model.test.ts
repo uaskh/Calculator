@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../api/errors'
 import {
+  appendText,
   calculatorReducer,
   historyLabel,
   initialState,
@@ -108,6 +109,27 @@ describe('insertKey', () => {
     const emoji = '😀'.repeat(MAX_EXPRESSION_LENGTH - 1)
     expect(insertKey(emoji, '1')).toBe(`${emoji}1`)
     expect(insertKey(`${emoji}1`, '1')).toBe(`${emoji}1`)
+  })
+})
+
+describe('appendText', () => {
+  it.each([
+    { expression: '', text: '7', expected: '7' },
+    { expression: '7', text: '+', expected: '7+' },
+    { expression: '2', text: ' ', expected: '2 ' },
+    { expression: 'x', text: 'y', expected: 'xy' },
+    { expression: '2', text: '😀', expected: '2😀' },
+    { expression: '2+', text: 'sqrt(', expected: '2+sqrt(' },
+  ])('appends $text to "$expression"', ({ expression, text, expected }) => {
+    expect(appendText(expression, text)).toBe(expected)
+  })
+
+  it('ignores text that would exceed the limit, counting code points (FR-10.4)', () => {
+    const full = '😀'.repeat(MAX_EXPRESSION_LENGTH)
+    expect(appendText(full, '1')).toBe(full)
+    const oneShort = '1'.repeat(MAX_EXPRESSION_LENGTH - 1)
+    expect(appendText(oneShort, '😀')).toHaveLength(MAX_EXPRESSION_LENGTH + 1)
+    expect(appendText(oneShort, '12')).toBe(oneShort)
   })
 })
 
@@ -322,6 +344,21 @@ describe('calculatorReducer', () => {
         expression: '1'.repeat(MAX_EXPRESSION_LENGTH),
       }
       expect(calculatorReducer(full, { type: 'keyPressed', key: 'sqrt' })).toBe(full)
+    })
+
+    it('appends a typed character and ignores one beyond the limit (decision 38)', () => {
+      const typed = reduce([
+        { type: 'characterTyped', character: '2' },
+        { type: 'characterTyped', character: '+' },
+        { type: 'characterTyped', character: '2' },
+      ])
+      expect(typed).toMatchObject({ expression: '2+2', phase: 'live', revision: 3 })
+
+      const full: CalculatorState = {
+        ...initialState,
+        expression: '1'.repeat(MAX_EXPRESSION_LENGTH),
+      }
+      expect(calculatorReducer(full, { type: 'characterTyped', character: '1' })).toBe(full)
     })
 
     it('removes the last character on backspace and ignores it when empty (FR-12.1)', () => {

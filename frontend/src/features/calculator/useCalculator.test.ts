@@ -477,4 +477,17 @@ describe('useCalculator', () => {
 
     expect(result.current.state).toMatchObject({ expression: 'sqrt(16)', result: '4' })
   })
+
+  it('appends typed characters through the reducer and evaluates them (decision 38)', async () => {
+    const { result } = setup()
+
+    act(() => {
+      result.current.typeCharacter('2')
+      result.current.typeCharacter('+')
+      result.current.typeCharacter('2')
+    })
+    await advance(DEBOUNCE_MS)
+
+    expect(result.current.state).toMatchObject({ expression: '2+2', result: '4' })
+  })
 })

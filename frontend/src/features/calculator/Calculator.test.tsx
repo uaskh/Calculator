@@ -611,6 +611,202 @@ describe('<Calculator />', () => {
     })
   })
 
+  describe('keyboard focus and typing anywhere (UI-7, decision 38)', () => {
+    /** Moves focus to the page background, as after a click on empty space. */
+    function blurToBody() {
+      input().blur()
+      expect(document.activeElement).toBe(document.body)
+    }
+
+    it('focuses the expression input as soon as it renders', () => {
+      renderWithProviders(<Calculator />)
+
+      expect(input()).toHaveFocus()
+    })
+
+    it('routes characters typed on the page background to the input and shows the live result', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      blurToBody()
+
+      await user.keyboard('2+2')
+
+      expect(input()).toHaveValue('2+2')
+      expect(input()).toHaveFocus()
+      expect(input().selectionStart).toBe(3)
+      await expectResult('4')
+    })
+
+    it('removes one character with Backspace pressed on the background', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '12+3')
+      blurToBody()
+
+      await user.keyboard('{Backspace}')
+
+      expect(input()).toHaveValue('12+')
+      expect(input()).toHaveFocus()
+      expect(input().selectionStart).toBe(3)
+    })
+
+    it('commits with Enter pressed on the background', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      blurToBody()
+
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(input()).toHaveValue('4')
+      })
+      expect(screen.getAllByRole('button', { name: '2+2 = 4' })).toHaveLength(1)
+      expect(input()).toHaveFocus()
+    })
+
+    it('clears with Escape pressed on the background', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      await expectResult('4')
+      blurToBody()
+
+      await user.keyboard('{Escape}')
+
+      expect(input()).toHaveValue('')
+      expect(output()).toBeEmptyDOMElement()
+      expect(input()).toHaveFocus()
+    })
+
+    it('appends a character typed while a keypad button has focus and moves focus to the input', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2')
+      key('add').focus()
+
+      await user.keyboard('7')
+
+      expect(input()).toHaveValue('27')
+      expect(input()).toHaveFocus()
+      expect(input().selectionStart).toBe(2)
+    })
+
+    it('commits exactly once for Enter on the focused equals button', async () => {
+      const sent = trackRequests()
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      await waitFor(() => {
+        expect(sent).toEqual(['2+2'])
+      })
+      key('equals').focus()
+
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(input()).toHaveValue('4')
+      })
+      expect(screen.getAllByRole('button', { name: '2+2 = 4' })).toHaveLength(1)
+      expect(sent).toEqual(['2+2', '2+2'])
+      expect(input()).toHaveFocus()
+    })
+
+    it('activates a focused history entry with Enter without committing', async () => {
+      const sent = trackRequests()
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      await user.keyboard('{Enter}')
+      await waitFor(() => {
+        expect(input()).toHaveValue('4')
+      })
+      await user.clear(input())
+      await user.type(input(), '3*3')
+      await user.keyboard('{Enter}')
+      await waitFor(() => {
+        expect(input()).toHaveValue('9')
+      })
+      const before = sent.length
+      screen.getByRole('button', { name: '2+2 = 4' }).focus()
+
+      await user.keyboard('{Enter}')
+
+      expect(input()).toHaveValue('2+2')
+      expect(input()).toHaveFocus()
+      await expectResult('4')
+      expect(sent.slice(before)).toEqual(['2+2'])
+      expect(
+        within(screen.getByRole('region', { name: 'History' }))
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual(['3*3 = 9', '2+2 = 4'])
+    })
+
+    it('activates a focused keypad button with Space, appending its token once', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      key('7').focus()
+
+      await user.keyboard(' ')
+
+      expect(input()).toHaveValue('7')
+      expect(input()).toHaveFocus()
+    })
+
+    it('keeps the Tab order from the input through the result to the keypad', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      expect(input()).toHaveFocus()
+
+      await user.tab()
+      expect(output()).toHaveFocus()
+      await user.tab()
+      expect(key('clear')).toHaveFocus()
+      await user.tab()
+      expect(key('backspace')).toHaveFocus()
+    })
+
+    it.each([
+      { name: 'Ctrl', keys: '{Control>}c{/Control}' },
+      { name: 'Meta', keys: '{Meta>}r{/Meta}' },
+      { name: 'Alt', keys: '{Alt>}7{/Alt}' },
+    ])('does not intercept $name combinations', async ({ keys }) => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      await user.type(input(), '2+2')
+      blurToBody()
+      const prevented: boolean[] = []
+      const observe = (event: KeyboardEvent) => {
+        prevented.push(event.defaultPrevented)
+      }
+      window.addEventListener('keydown', observe)
+
+      await user.keyboard(keys)
+
+      window.removeEventListener('keydown', observe)
+      expect(input()).toHaveValue('2+2')
+      expect(document.activeElement).toBe(document.body)
+      expect(prevented.length).toBeGreaterThan(0)
+      expect(prevented).not.toContain(true)
+    })
+
+    it('ignores a character typed on the background once the expression is full (FR-10.4)', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<Calculator />)
+      const full = '1'.repeat(1024)
+      await user.click(input())
+      await user.paste(full)
+      expect(input()).toHaveValue(full)
+      blurToBody()
+
+      await user.keyboard('2')
+
+      expect(input()).toHaveValue(full)
+      expect(input()).toHaveFocus()
+    })
+  })
+
   describe('history (FR-14)', () => {
     it('lists commits newest first and reloads an entry through the live path (FR-14.1, FR-14.2)', async () => {
       const sent = trackRequests()

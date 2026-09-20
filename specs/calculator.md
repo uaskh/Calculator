@@ -1,7 +1,7 @@
 # Calculator
 
 > Status: Ready for implementation
-> Owner: aksh · Last updated: 2026-09-18
+> Owner: aksh · Last updated: 2026-09-20
 
 ## 1. Summary
 
@@ -354,6 +354,14 @@ problem `NOT_READY` during shutdown.
 
 Single screen, mobile-first, usable from 320 px to wide desktop.
 
+- **Layout** (decision 37): below 48 rem (phones) one column: display, keypad, history.
+  From 48 rem the calculator is a single centred panel at most 64 rem wide with a surface
+  background: the display spans the panel, and below it the keypad sits on the left and
+  History on the right (the history column is reserved even while empty so the keypad does
+  not move when the first entry appears). Key height, font sizes and spacing scale with the
+  viewport (about 60 px keys on a laptop, never below 44 px) so the app fills a desktop
+  window instead of looking like a phone screen in its corner.
+
 - **Header**: title "Calculator".
 - **Display region**: labelled expression `<input>` (`maxLength=1024`, `autoComplete="off"`,
   `spellCheck=false`; `inputMode="none"` on touch devices detected with `(pointer: coarse)`
@@ -383,6 +391,12 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
   request was sent), success, error, committing (`=` disabled, Enter ignored, same
   "Calculating…" rule), committed (input holds the result, result area blank, no request
   until the next edit). Client-side fetch timeout 10 s → network message.
+- **Keyboard focus** (decision 38): the expression input is focused when the page opens,
+  so typing works without a click. When focus is on the page background or on a keypad or
+  history button, printable characters and Backspace are routed to the input (appended at
+  the end, respecting the 1,024-character limit) and Escape clears from anywhere; Enter and
+  Space on a button keep their native meaning (activate the button), Enter on the
+  background commits. Tab order is unchanged.
 - **Keyboard**: all characters typed directly; Enter commits; Escape clears; these are the
   only shortcuts, and the keyboard Backspace keeps native caret behaviour; Tab reaches every
   button; visible `:focus-visible` ring; no keyboard traps.
@@ -478,6 +492,8 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
 | 31 | History duplicates | Always append | 2026-09-17 |
 | 32 | Validation messages | Fixed templates per code (section 6), shown verbatim by the UI | 2026-09-17 |
 | 33 | Handler timeout | 503 problem `TIMEOUT` | 2026-09-17 |
+| 38 | Keyboard focus | Input focused on load; printable keys, Backspace and Escape are routed to the input from the page background and from buttons; Enter/Space on a button stay native | 2026-09-20 |
+| 37 | Desktop layout | From 48 rem: one centred panel ≤ 64 rem, display across the top, keypad left and History right, sizes scaling with the viewport; phones keep the single column | 2026-09-20 |
 | 36 | `sqrt` key label | `aria-label="sqrt, square root"` so the visible text is part of the accessible name (WCAG 2.5.3, speech control) | 2026-09-19 |
 | 35 | Fractional `^` | Computed in-package (`exp(f·ln x)` in binary fixed point on `math/big`; three precision tiers of 80/112/172 decimal places chosen from the base's integer digits, each with 40 guard places and an exact `2^k` split) instead of `decimal.PowWithPrecision`, which races under concurrent use (package-level factorial cache, `go test -race` fails) and seeds `Ln` from a `float64`; the library still parses, rounds, multiplies and divides | 2026-09-18 |
 | 34 | Audit assumptions | The audit's low-risk assumptions (request ID, CORS, security headers, config defaults, log fields, focus and status behaviour, percent edge cases, validation order, Playwright projects, compose ports, `=` key span) are written into sections 4–10 and testability rewrites into NFR-1/2/4/6/8 | 2026-09-17 |

@@ -13,6 +13,8 @@ export interface Calculator {
   state: CalculatorState
   edit: (text: string) => void
   pressKey: (key: KeypadKey) => void
+  /** Appends one character typed outside the input (decision 38). */
+  typeCharacter: (character: string) => void
   backspace: () => void
   clear: () => void
   commit: () => void
@@ -71,6 +73,9 @@ export function useCalculator(): Calculator {
   const pressKey = useCallback((key: KeypadKey) => {
     dispatch({ type: 'keyPressed', key })
   }, [])
+  const typeCharacter = useCallback((character: string) => {
+    dispatch({ type: 'characterTyped', character })
+  }, [])
   const backspace = useCallback(() => {
     dispatch({ type: 'backspace' })
   }, [])
@@ -84,5 +89,5 @@ export function useCalculator(): Calculator {
     dispatch({ type: 'historyActivated', index })
   }, [])
 
-  return { state, edit, pressKey, backspace, clear, commit, activateHistory }
+  return { state, edit, pressKey, typeCharacter, backspace, clear, commit, activateHistory }
 }
