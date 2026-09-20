@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/aksh/calculator/backend/internal/app"
+	"github.com/aksh/calculator/backend/internal/calc"
 	"github.com/aksh/calculator/backend/internal/config"
 	"github.com/aksh/calculator/backend/internal/server"
 )
@@ -52,7 +53,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := server.Run(ctx, cfg.HTTP, app.New(cfg, logger), logger); err != nil {
+	a := app.New(cfg, logger, calc.New())
+	if err := server.Run(ctx, cfg.HTTP, a.Handler, logger, a.BeginShutdown); err != nil {
 		logger.ErrorContext(ctx, "service stopped", "error", err)
 		return 1
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ type Config struct {
 	HTTP           HTTP
 	LogLevel       slog.Level
 	LogFormat      string   // "json" (default) or "text"
-	AllowedOrigins []string // CORS allow-list; empty means same-origin only
+	AllowedOrigins []string // CORS allow-list of exact origins; empty means same-origin only
 }
 
 // HTTP holds listener, limit and timeout settings.
@@ -47,7 +48,7 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 		LogLevel:       r.logLevel("LOG_LEVEL", slog.LevelInfo),
 		LogFormat:      r.oneOf("LOG_FORMAT", "json", "json", "text"),
-		AllowedOrigins: r.list("CORS_ALLOWED_ORIGINS"),
+		AllowedOrigins: r.origins("CORS_ALLOWED_ORIGINS"),
 	}
 	if cfg.HTTP.RequestTimeout >= cfg.HTTP.WriteTimeout {
 		r.fail("HTTP_REQUEST_TIMEOUT (%s) must be shorter than HTTP_WRITE_TIMEOUT (%s)",
@@ -145,4 +146,15 @@ func (r *reader) list(key string) []string {
 		}
 	}
 	return out
+}
+
+// origins reads a comma-separated allow-list of exact origins. The wildcard "*" is
+// refused: CORS is either off or limited to origins named explicitly (spec §6).
+func (r *reader) origins(key string) []string {
+	origins := r.list(key)
+	if slices.Contains(origins, "*") {
+		r.fail("%s must list exact origins such as https://app.example.com; \"*\" is not allowed", key)
+		return nil
+	}
+	return origins
 }

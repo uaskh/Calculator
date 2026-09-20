@@ -12,6 +12,8 @@ GO           ?= go
 NPM          ?= npm
 BACKEND_COVERAGE_MIN ?= 80
 DOMAIN_COVERAGE_MIN  ?= 90
+BENCH_COUNT          ?= 100
+BENCH_MAX_MS         ?= 5
 
 .PHONY: help setup dev run-backend run-frontend fmt fmt-check lint typecheck \
 	test test-backend test-frontend test-e2e coverage build vuln verify \
@@ -62,15 +64,17 @@ test-e2e: ## Black-box API tests and Playwright journeys (starts both apps)
 	cd $(BACKEND_DIR) && $(GO) test -race -count=1 ./test/e2e/...
 	cd $(FRONTEND_DIR) && $(NPM) run test:e2e
 
-coverage: ## Tests with coverage thresholds; writes coverage/ and docs/coverage.md
+coverage: ## Tests with coverage thresholds and the evaluator benchmark; writes coverage/ and docs/coverage.md
 	@mkdir -p $(COVERAGE_DIR)/backend docs
 	cd $(BACKEND_DIR) && $(GO) test -race -count=1 -covermode=atomic -coverpkg=./... \
 		-coverprofile=../$(COVERAGE_DIR)/backend/coverage.out ./...
 	cd $(BACKEND_DIR) && $(GO) tool cover -html=../$(COVERAGE_DIR)/backend/coverage.out \
 		-o ../$(COVERAGE_DIR)/backend/index.html
 	cd $(FRONTEND_DIR) && $(NPM) run --silent test:coverage
-	bash scripts/coverage-report.sh $(COVERAGE_DIR) $(BACKEND_COVERAGE_MIN) $(DOMAIN_COVERAGE_MIN) > docs/coverage.md
-	@grep -E '^\| \*\*Total|^\| Lines' docs/coverage.md
+	cd $(BACKEND_DIR) && $(GO) test -run='^$$' -bench=BenchmarkEvaluate -benchtime=$(BENCH_COUNT)x ./internal/calc/ \
+		| tee ../$(COVERAGE_DIR)/backend/bench.txt
+	bash scripts/coverage-report.sh $(COVERAGE_DIR) $(BACKEND_COVERAGE_MIN) $(DOMAIN_COVERAGE_MIN) $(BENCH_MAX_MS) > docs/coverage.md
+	@grep -E '^\| \*\*Total|^\| Lines|^\*\*Benchmark' docs/coverage.md
 
 build: ## Production builds (backend binary in bin/, frontend in frontend/dist)
 	cd $(BACKEND_DIR) && CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o ../bin/$(SERVICE) ./cmd/$(SERVICE)

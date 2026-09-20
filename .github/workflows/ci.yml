@@ -46,7 +46,8 @@ jobs:
         run: |
           mkdir -p ../coverage/backend
           go test -race -count=1 -covermode=atomic -coverpkg=./... -coverprofile=../coverage/backend/coverage.out ./...
-          bash ../scripts/coverage-report.sh ../coverage 80 90 >> "$GITHUB_STEP_SUMMARY"
+          go test -run='^$' -bench=BenchmarkEvaluate -benchtime=100x ./internal/calc/ | tee ../coverage/backend/bench.txt
+          bash ../scripts/coverage-report.sh ../coverage 80 90 5 >> "$GITHUB_STEP_SUMMARY"
       - name: Vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
       - name: Build

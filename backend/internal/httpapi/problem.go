@@ -14,6 +14,7 @@ const (
 	CodeNotFound             = "NOT_FOUND"
 	CodeMethodNotAllowed     = "METHOD_NOT_ALLOWED"
 	CodeNotReady             = "NOT_READY"
+	CodeTimeout              = "TIMEOUT"
 	CodeInternal             = "INTERNAL_ERROR"
 )
 
@@ -32,11 +33,13 @@ type Problem struct {
 	Errors    []FieldError `json:"errors,omitempty"`
 }
 
-// FieldError describes one invalid input field.
+// FieldError describes one invalid input field. Position, when known, is the 0-based
+// code-point index into the field's value where the problem starts.
 type FieldError struct {
-	Field   string `json:"field"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Field    string `json:"field"`
+	Code     string `json:"code"`
+	Position *int   `json:"position,omitempty"`
+	Message  string `json:"message"`
 }
 
 // writeProblem sends p, filling in the type, title, instance and request ID.
@@ -55,6 +58,9 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p Problem) {
 		body = []byte(`{"type":"about:blank","title":"Internal Server Error","status":500,"code":"INTERNAL_ERROR"}`)
 		p.Status = http.StatusInternalServerError
 	}
+	if p.Status >= http.StatusInternalServerError {
+		stateFrom(r.Context()).setError(p.summary())
+	}
 	h := w.Header()
 	h.Set("Content-Type", problemContentType)
 	h.Set("Cache-Control", "no-store")
@@ -62,9 +68,18 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p Problem) {
 	_, _ = w.Write(append(body, '\n'))
 }
 
-// writeJSON marshals v before writing anything, so an encoding failure (for example a NaN
-// float) becomes a clean 500 problem instead of a truncated success response.
-func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
+// summary is the one-line form used in the access log for server errors.
+func (p Problem) summary() string {
+	if p.Detail == "" {
+		return p.Code
+	}
+	return p.Code + ": " + p.Detail
+}
+
+// writeJSON sends v as a 200 response. It marshals v before writing anything, so an
+// encoding failure (for example a NaN float) becomes a clean 500 problem instead of a
+// truncated success response.
+func writeJSON(w http.ResponseWriter, r *http.Request, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		loggerFrom(r.Context()).ErrorContext(r.Context(), "encode response", "error", err)
@@ -74,6 +89,6 @@ func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	h := w.Header()
 	h.Set("Content-Type", "application/json; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
+	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(append(body, '\n'))
 }

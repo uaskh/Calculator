@@ -46,12 +46,14 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any)
 	return nil
 }
 
+// isJSON accepts exactly the application/json media type, with any parameters (such as
+// charset=utf-8). Structured-syntax suffixes like application/problem+json are refused.
 func isJSON(contentType string) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return false
 	}
-	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
+	return mediaType == "application/json"
 }
 
 func decodeProblem(err error) *Problem {

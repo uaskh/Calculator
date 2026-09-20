@@ -5,25 +5,173 @@ info:
   description: >-
     Evaluates arithmetic expressions (+ - * / ^, unary minus, parentheses, sqrt and
     calculator-style %) with exact decimal arithmetic and returns the result as a string.
-    Every error response uses RFC 9457 problem details with a stable `code`.
+    Every error response uses RFC 9457 problem details with a stable `code`. Every response
+    carries `X-Request-ID`, `Cache-Control: no-store` and the security headers
+    `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy:
+    no-referrer`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`,
+    `Cross-Origin-Opener-Policy: same-origin` and `Content-Security-Policy: default-src
+    'none'; frame-ancestors 'none'`.
 servers:
   - url: http://localhost:8080
     description: Local development
 tags:
+  - name: calculator
+    description: Expression evaluation
   - name: operations
     description: Health and readiness probes
 paths:
+  /api/v1/evaluate:
+    post:
+      operationId: evaluateExpression
+      summary: Evaluate an arithmetic expression
+      description: >-
+        Lexes, normalizes, parses and evaluates `expression`. Normalization drops trailing
+        binary operators, a trailing `.` and a trailing `(`/`sqrt(`, and closes unmatched
+        parentheses; the evaluated expression is returned so clients can show it. Limits:
+        1,024 code points, nesting depth 32, request body 4 KiB, |exponent| <= 1000,
+        |value| < 10^100, handler timeout 5 s. Requests must be `application/json`
+        (parameters such as `charset=utf-8` are accepted; other media types are 415).
+        Field names are matched case-insensitively by the decoder and the last duplicate
+        key wins, as in Go's `encoding/json`.
+      tags: [calculator]
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+            examples:
+              success:
+                summary: Unclosed parenthesis is closed by normalization
+                value:
+                  expression: "2*(3+4"
+              validation:
+                summary: Empty group is a parse error
+                value:
+                  expression: "2+()"
+              arithmetic:
+                summary: Division by zero
+                value:
+                  expression: "1/0"
+      responses:
+        "200":
+          description: The evaluated (normalized) expression and its result.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateResponse"
+              examples:
+                success:
+                  value:
+                    expression: "2*(3+4)"
+                    result: "14"
+        "400":
+          description: >-
+            Either the body is not a valid request (`MALFORMED_REQUEST`) or the expression is
+            missing or cannot be parsed (`VALIDATION_FAILED`, exactly one entry in `errors`
+            with `detail` repeating its `message`).
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/MalformedRequestProblem"
+                  - $ref: "#/components/schemas/ValidationProblem"
+              examples:
+                unexpectedToken:
+                  summary: Parse error with a position
+                  value:
+                    type: about:blank
+                    title: Bad Request
+                    status: 400
+                    detail: "unexpected ')' at character 4"
+                    instance: /api/v1/evaluate
+                    code: VALIDATION_FAILED
+                    requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+                    errors:
+                      - field: expression
+                        code: UNEXPECTED_TOKEN
+                        position: 3
+                        message: "unexpected ')' at character 4"
+                empty:
+                  summary: Nothing left to evaluate after normalization
+                  value:
+                    type: about:blank
+                    title: Bad Request
+                    status: 400
+                    detail: expression is empty
+                    instance: /api/v1/evaluate
+                    code: VALIDATION_FAILED
+                    requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+                    errors:
+                      - field: expression
+                        code: EMPTY
+                        message: expression is empty
+                required:
+                  summary: Missing or null expression
+                  value:
+                    type: about:blank
+                    title: Bad Request
+                    status: 400
+                    detail: expression is required
+                    instance: /api/v1/evaluate
+                    code: VALIDATION_FAILED
+                    requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+                    errors:
+                      - field: expression
+                        code: REQUIRED
+                        message: expression is required
+                wrongType:
+                  summary: Non-string expression
+                  value:
+                    type: about:blank
+                    title: Bad Request
+                    status: 400
+                    detail: Request body contains a value of the wrong type.
+                    instance: /api/v1/evaluate
+                    code: MALFORMED_REQUEST
+                    requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+                    errors:
+                      - field: expression
+                        code: INVALID_TYPE
+                        message: must be a string
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/ArithmeticError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/Timeout"
   /healthz:
     get:
       operationId: getHealth
       summary: Liveness probe
+      description: Always 200 while the process runs; it has no dependencies.
       tags: [operations]
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
       responses:
         "200":
           description: The process is running.
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
@@ -34,10 +182,20 @@ paths:
     get:
       operationId: getReadiness
       summary: Readiness probe
+      description: >-
+        200 while the service accepts traffic; 503 `NOT_READY` once shutdown has started
+        (the flag flips on SIGTERM/SIGINT before the listener closes).
       tags: [operations]
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
       responses:
         "200":
           description: The service can take traffic.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
           content:
             application/json:
               schema:
@@ -47,12 +205,28 @@ paths:
         "503":
           $ref: "#/components/responses/NotReady"
 components:
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: >-
+        Correlation ID. Echoed in the response when it matches the pattern; otherwise
+        replaced by a generated one.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9._-]{1,64}$"
   headers:
     RequestId:
       description: Correlation ID, echoed from the request when valid, generated otherwise.
       schema:
         type: string
-        maxLength: 128
+        pattern: "^[0-9a-f]{32}$|^[A-Za-z0-9._-]{1,64}$"
+    CacheControl:
+      description: Always `no-store`; results are never cached.
+      schema:
+        type: string
+        const: no-store
   schemas:
     Status:
       type: object
@@ -61,6 +235,37 @@ components:
       properties:
         status:
           type: string
+          const: ok
+    EvaluateRequest:
+      type: object
+      additionalProperties: false
+      required: [expression]
+      properties:
+        expression:
+          type: string
+          description: >-
+            Arithmetic expression: decimal numbers, `+ - * / ^ %`, parentheses and
+            `sqrt(...)`; ASCII only, at most 1,024 code points. Missing or `null` is
+            `VALIDATION_FAILED`/`REQUIRED`; any non-string value is `MALFORMED_REQUEST`.
+          maxLength: 1024
+          examples: ["2*(3+4", "sqrt(16)+2^10", "200+10%"]
+    EvaluateResponse:
+      type: object
+      additionalProperties: false
+      required: [expression, result]
+      properties:
+        expression:
+          type: string
+          description: The expression that was evaluated, after normalization.
+          maxLength: 1024
+        result:
+          type: string
+          description: >-
+            Exact decimal result in canonical form: optional leading `-`, digits without
+            leading zeros, optional fraction without trailing zeros; never `-0` and never
+            exponent notation. Up to 100 integer digits and 16 decimal places.
+          pattern: "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$"
+          maxLength: 118
     FieldError:
       type: object
       additionalProperties: false
@@ -69,12 +274,53 @@ components:
         field:
           type: string
           description: JSON path of the offending field.
+          example: expression
         code:
           type: string
+          description: Stable, machine-readable reason.
           example: REQUIRED
+        position:
+          type: integer
+          minimum: 0
+          description: >-
+            0-based code-point index into the original (untrimmed) input where the problem
+            starts. Present only when a position exists; `message` states it 1-based.
         message:
           type: string
-          example: is required
+          description: Human-readable, safe to show to users verbatim.
+          example: expression is required
+    ValidationFieldError:
+      description: The single entry of `errors` in a `VALIDATION_FAILED` problem.
+      allOf:
+        - $ref: "#/components/schemas/FieldError"
+        - type: object
+          properties:
+            field:
+              const: expression
+            code:
+              type: string
+              enum:
+                - REQUIRED
+                - EMPTY
+                - TOO_LONG
+                - TOO_DEEP
+                - INVALID_CHARACTER
+                - INVALID_NUMBER
+                - UNEXPECTED_TOKEN
+                - UNBALANCED_PARENTHESIS
+                - UNKNOWN_FUNCTION
+              description: >-
+                `position` is omitted for `REQUIRED`, `EMPTY`, `TOO_LONG` and `TOO_DEEP`
+                and present for the others.
+    MalformedFieldError:
+      description: An optional entry of `errors` in a `MALFORMED_REQUEST` problem.
+      allOf:
+        - $ref: "#/components/schemas/FieldError"
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [INVALID_TYPE, UNKNOWN_FIELD]
     Problem:
       type: object
       description: RFC 9457 problem details with a stable error code.
@@ -93,58 +339,261 @@ components:
           maximum: 599
         detail:
           type: string
+          description: Safe, human-readable explanation of what to fix.
         instance:
           type: string
-          example: /api/v1/resource
+          description: Path of the request that failed.
+          example: /api/v1/evaluate
         code:
           type: string
+          description: Stable, machine-readable error code in UPPER_SNAKE_CASE.
           example: VALIDATION_FAILED
         requestId:
           type: string
+          description: Same value as the `X-Request-ID` response header.
         errors:
           type: array
           items:
             $ref: "#/components/schemas/FieldError"
+    MalformedRequestProblem:
+      description: >-
+        The body is not a single JSON object with the expected fields: invalid JSON, a
+        non-object, more than one JSON value, an unknown field or a value of the wrong
+        type. `errors` is present for wrong types (`INVALID_TYPE`) and unknown fields
+        (`UNKNOWN_FIELD`).
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [detail]
+          properties:
+            status:
+              const: 400
+            code:
+              const: MALFORMED_REQUEST
+            errors:
+              type: array
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/MalformedFieldError"
+    ValidationProblem:
+      description: >-
+        The expression is missing or cannot be parsed. `errors` has exactly one entry and
+        `detail` repeats its `message`.
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [detail, errors]
+          properties:
+            status:
+              const: 400
+            code:
+              const: VALIDATION_FAILED
+            errors:
+              type: array
+              minItems: 1
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/ValidationFieldError"
+    ArithmeticProblem:
+      description: >-
+        The expression is well formed but its value cannot be computed. `detail` is the
+        user-facing sentence for the code; there is no `errors` array.
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [detail]
+          properties:
+            status:
+              const: 422
+            code:
+              type: string
+              enum:
+                - DIVISION_BY_ZERO
+                - NEGATIVE_SQUARE_ROOT
+                - INVALID_POWER
+                - EXPONENT_TOO_LARGE
+                - RESULT_TOO_LARGE
+            detail:
+              type: string
+              enum:
+                - Cannot divide by zero.
+                - Cannot take the square root of a negative number.
+                - Cannot raise a negative number to a fractional power.
+                - Exponent must be between -1000 and 1000.
+                - Result is too large to calculate.
+          not:
+            required: [errors]
+    TimeoutProblem:
+      description: The handler exceeded its time budget (5 s by default).
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [detail]
+          properties:
+            status:
+              const: 503
+            code:
+              const: TIMEOUT
+            detail:
+              const: The calculation took too long.
   responses:
     BadRequest:
       description: Malformed JSON, wrong types, unknown or missing fields, invalid values.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
     NotFound:
-      description: No resource matches the path.
+      description: No resource matches the path (`NOT_FOUND`).
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: No resource matches this path.
+            instance: /api/v1/unknown
+            code: NOT_FOUND
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+    MethodNotAllowed:
+      description: The path exists but not for this method (`METHOD_NOT_ALLOWED`); `Allow` lists the methods that do.
+      headers:
+        Allow:
+          schema:
+            type: string
+            example: POST
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
     PayloadTooLarge:
-      description: The request body exceeds the configured limit.
+      description: The request body exceeds the configured limit (`PAYLOAD_TOO_LARGE`, 4 KiB by default).
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Request Entity Too Large
+            status: 413
+            detail: Request body must not exceed 4096 bytes.
+            instance: /api/v1/evaluate
+            code: PAYLOAD_TOO_LARGE
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
     UnsupportedMediaType:
-      description: The request body is not JSON.
+      description: The request's Content-Type is not `application/json` (`UNSUPPORTED_MEDIA_TYPE`).
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
-    UnprocessableContent:
-      description: The request is well-formed but breaks a business rule.
+          example:
+            type: about:blank
+            title: Unsupported Media Type
+            status: 415
+            detail: Content-Type must be application/json.
+            instance: /api/v1/evaluate
+            code: UNSUPPORTED_MEDIA_TYPE
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+    ArithmeticError:
+      description: The expression cannot be calculated; `code` says why.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
-            $ref: "#/components/schemas/Problem"
+            $ref: "#/components/schemas/ArithmeticProblem"
+          examples:
+            divisionByZero:
+              value:
+                type: about:blank
+                title: Unprocessable Entity
+                status: 422
+                detail: Cannot divide by zero.
+                instance: /api/v1/evaluate
+                code: DIVISION_BY_ZERO
+                requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
     InternalError:
-      description: Unexpected failure; details are logged with the request ID.
+      description: Unexpected failure (`INTERNAL_ERROR`); details are logged with the request ID and never returned.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Internal Server Error
+            status: 500
+            instance: /api/v1/evaluate
+            code: INTERNAL_ERROR
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
+    Timeout:
+      description: The evaluation did not finish within the handler timeout (`TIMEOUT`).
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/TimeoutProblem"
+          example:
+            type: about:blank
+            title: Service Unavailable
+            status: 503
+            detail: The calculation took too long.
+            instance: /api/v1/evaluate
+            code: TIMEOUT
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5
     NotReady:
-      description: The service is not ready to take traffic.
+      description: The service is shutting down and no longer takes traffic (`NOT_READY`).
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+          example:
+            type: about:blank
+            title: Service Unavailable
+            status: 503
+            detail: The service is not ready to handle requests.
+            instance: /readyz
+            code: NOT_READY
+            requestId: 4f9c0e7d8a1b2c3d4e5f60718293a4b5

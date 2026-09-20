@@ -25,6 +25,31 @@ func testConfig(addr string) config.HTTP {
 
 func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+func noop() {}
+
+func listen(t *testing.T) net.Listener {
+	t.Helper()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ln
+}
+
+func get(ctx context.Context, url string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, nil
+}
+
 func TestServe_GracefulShutdownDrainsInFlightRequests(t *testing.T) {
 	t.Parallel()
 
@@ -36,14 +61,10 @@ func TestServe_GracefulShutdownDrainsInFlightRequests(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	var lc net.ListenConfig
-	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := listen(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, ln, testConfig(ln.Addr().String()), handler, discard()) }()
+	go func() { done <- Serve(ctx, ln, testConfig(ln.Addr().String()), handler, discard(), noop) }()
 
 	var (
 		wg     sync.WaitGroup
@@ -53,14 +74,7 @@ func TestServe_GracefulShutdownDrainsInFlightRequests(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+ln.Addr().String()+"/", http.NoBody)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			reqErr = err
-			return
-		}
-		defer resp.Body.Close()
-		status = resp.StatusCode
+		status, reqErr = get(t.Context(), "http://"+ln.Addr().String()+"/")
 	}()
 
 	<-started
@@ -77,24 +91,130 @@ func TestServe_GracefulShutdownDrainsInFlightRequests(t *testing.T) {
 	}
 }
 
+// TestServe_BeforeShutdownRunsWhileStillServing proves the hook runs after ctx ends and
+// before srv.Shutdown: a request issued from inside the hook still gets a response, which
+// is impossible once Shutdown has closed the listener.
+func TestServe_BeforeShutdownRunsWhileStillServing(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu     sync.Mutex
+		events []string
+	)
+	record := func(event string) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, event)
+	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		record("request")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	ln := listen(t)
+	url := "http://" + ln.Addr().String() + "/"
+	ctx, cancel := context.WithCancel(t.Context())
+	var (
+		hookStatus int
+		hookErr    error
+	)
+	hook := func() {
+		record("hook")
+		hookStatus, hookErr = get(t.Context(), url)
+	}
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, ln, testConfig(ln.Addr().String()), handler, discard(), hook) }()
+
+	if status, err := get(t.Context(), url); err != nil || status != http.StatusOK {
+		t.Fatalf("warm-up request: status %d, err %v", status, err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Serve() = %v, want nil", err)
+	}
+
+	if hookErr != nil || hookStatus != http.StatusOK {
+		t.Fatalf("request from the hook: status %d, err %v; want 200 (the server must still be serving)", hookStatus, hookErr)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{"request", "hook", "request"}
+	if len(events) != len(want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
+	for i := range want {
+		if events[i] != want[i] {
+			t.Fatalf("events = %v, want %v", events, want)
+		}
+	}
+	if _, err := get(t.Context(), url); err == nil {
+		t.Error("server still accepting connections after Serve returned")
+	}
+}
+
+func TestServe_NilHookIsAllowed(t *testing.T) {
+	t.Parallel()
+
+	ln := listen(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, ln, testConfig(ln.Addr().String()), http.NotFoundHandler(), discard(), nil) }()
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Serve() = %v, want nil", err)
+	}
+}
+
 func TestRun_InvalidAddress(t *testing.T) {
 	t.Parallel()
-	err := Run(t.Context(), testConfig("256.0.0.1:http-alt-invalid"), http.NotFoundHandler(), discard())
+	err := Run(t.Context(), testConfig("256.0.0.1:http-alt-invalid"), http.NotFoundHandler(), discard(), noop)
 	if err == nil {
 		t.Fatal("Run() = nil, want listen error")
 	}
 }
 
+func TestRun_ServesUntilCancelled(t *testing.T) {
+	t.Parallel()
+	ln := listen(t)
+	addr := ln.Addr().String()
+	_ = ln.Close() // free the port for Run()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	hookCalled := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, testConfig(addr), http.NotFoundHandler(), discard(), func() { close(hookCalled) })
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := get(t.Context(), "http://"+addr+"/"); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("server never started listening")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Run() = %v, want nil", err)
+	}
+	select {
+	case <-hookCalled:
+	default:
+		t.Error("beforeShutdown hook was not called")
+	}
+}
+
 func TestServe_ListenerFailure(t *testing.T) {
 	t.Parallel()
-	var lc net.ListenConfig
-	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := listen(t)
 	_ = ln.Close() // Serve fails immediately on a closed listener
 
-	if err := Serve(t.Context(), ln, testConfig(""), http.NotFoundHandler(), discard()); err == nil {
+	if err := Serve(t.Context(), ln, testConfig(""), http.NotFoundHandler(), discard(), noop); err == nil {
 		t.Fatal("Serve() = nil, want error")
 	}
 }

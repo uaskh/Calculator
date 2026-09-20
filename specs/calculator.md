@@ -1,7 +1,7 @@
 # Calculator
 
 > Status: Ready for implementation
-> Owner: aksh · Last updated: 2026-09-17
+> Owner: aksh · Last updated: 2026-09-18
 
 ## 1. Summary
 
@@ -227,10 +227,12 @@ break directness (`200+(10)%` = 220), and `%` binds tighter than `^` (`2%^2` = 0
   ordinary integer power (`3^-1` = `0.3333333333333333`, `3^-2` = `0.1111111111111111`,
   `2^-1000` = `0`, `0.5^-1000` = `RESULT_TOO_LARGE`, `0^-1` = `DIVISION_BY_ZERO`).
 - Inexact operations — `/`, `^` with a non-integer exponent, `sqrt` — are computed with at
-  least 40 guard digits (Newton iteration for `sqrt`; the library's power with precision for
-  fractional `^`) and rounded half away from zero to 32 places, so that the 32-place value
-  is correctly rounded and guard digits absorb intermediate error (`1/3*3` = `1`,
-  `sqrt(2)*sqrt(2)` = `2`).
+  least 40 guard digits (Newton iteration for `sqrt`; for the fractional part of `^`,
+  `exp(f·ln x)` evaluated in fixed point on `math/big` integers with 88 places, because the
+  library's `PowWithPrecision` has a data race under concurrent use and seeds its logarithm
+  from a `float64`, see decision 35) and rounded half away from zero to 32 places, so that
+  the 32-place value is correctly rounded and guard digits absorb intermediate error
+  (`1/3*3` = `1`, `sqrt(2)*sqrt(2)` = `2`).
 - Every intermediate result is rounded to 32 decimal places (half away from zero).
   Integer powers are evaluated by square-and-multiply with every partial product rounded to
   32 places and rejected as `RESULT_TOO_LARGE` the moment it reaches 10^100, so no value
@@ -472,6 +474,7 @@ Single screen, mobile-first, usable from 320 px to wide desktop.
 | 31 | History duplicates | Always append | 2026-09-17 |
 | 32 | Validation messages | Fixed templates per code (section 6), shown verbatim by the UI | 2026-09-17 |
 | 33 | Handler timeout | 503 problem `TIMEOUT` | 2026-09-17 |
+| 35 | Fractional `^` | Computed in-package (`exp(f·ln x)` in fixed point on `math/big`, 88 places) instead of `decimal.PowWithPrecision`, which races under concurrent use (package-level factorial cache, `go test -race` fails) and seeds `Ln` from a `float64`; the library still parses, rounds, multiplies and divides | 2026-09-18 |
 | 34 | Audit assumptions | The audit's low-risk assumptions (request ID, CORS, security headers, config defaults, log fields, focus and status behaviour, percent edge cases, validation order, Playwright projects, compose ports, `=` key span) are written into sections 4–10 and testability rewrites into NFR-1/2/4/6/8 | 2026-09-17 |
 
 ## 12. Open questions

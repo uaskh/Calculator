@@ -20,6 +20,8 @@ type Deps struct {
 	AllowedOrigins []string
 	// Ready reports whether the service can take traffic; nil means always ready.
 	Ready func(context.Context) error
+	// Evaluator is the calculator domain behind POST /api/v1/evaluate.
+	Evaluator Evaluator
 }
 
 // NewRouter returns the service's root handler with all routes and middleware.
@@ -30,9 +32,8 @@ func NewRouter(d Deps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", health)
 	mux.HandleFunc("GET /readyz", readiness(d.Ready))
-	// Feature routes, one line each, for example:
-	//   items := newItemsHandler(d.Items, d.MaxBodyBytes)
-	//   mux.HandleFunc("POST /api/v1/items", items.create)
+	evaluate := newEvaluateHandler(d.Evaluator, d.MaxBodyBytes)
+	mux.HandleFunc("POST /api/v1/evaluate", evaluate.evaluate)
 
 	return chain(problemMux{mux},
 		requestID(d.Logger),
@@ -86,7 +87,7 @@ type statusBody struct {
 }
 
 func health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, r, http.StatusOK, statusBody{Status: "ok"})
+	writeJSON(w, r, statusBody{Status: "ok"})
 }
 
 func readiness(check func(context.Context) error) http.HandlerFunc {
@@ -102,6 +103,6 @@ func readiness(check func(context.Context) error) http.HandlerFunc {
 				return
 			}
 		}
-		writeJSON(w, r, http.StatusOK, statusBody{Status: "ok"})
+		writeJSON(w, r, statusBody{Status: "ok"})
 	}
 }

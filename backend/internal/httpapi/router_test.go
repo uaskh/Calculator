@@ -19,6 +19,33 @@ func testDeps() Deps {
 		MaxBodyBytes:   1 << 10,
 		RequestTimeout: time.Second,
 		AllowedOrigins: []string{"http://localhost:5173"},
+		Evaluator:      &fakeEvaluator{},
+	}
+}
+
+// securityHeaderValues are the defensive headers every response must carry (spec §6, A-23).
+var securityHeaderValues = map[string]string{
+	"X-Content-Type-Options":     "nosniff",
+	"X-Frame-Options":            "DENY",
+	"Referrer-Policy":            "no-referrer",
+	"Permissions-Policy":         "camera=(), microphone=(), geolocation=()",
+	"Cross-Origin-Opener-Policy": "same-origin",
+	"Content-Security-Policy":    "default-src 'none'; frame-ancestors 'none'",
+}
+
+// assertCommonHeaders checks the headers the contract promises on every response.
+func assertCommonHeaders(t *testing.T, h http.Header) {
+	t.Helper()
+	if h.Get(requestIDHeader) == "" {
+		t.Errorf("missing %s header", requestIDHeader)
+	}
+	if got := h.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+	for header, want := range securityHeaderValues {
+		if got := h.Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
 	}
 }
 
@@ -49,12 +76,7 @@ func TestRouter_Health(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s /healthz status = %d, want 200", method, rec.Code)
 		}
-		if rec.Header().Get(requestIDHeader) == "" {
-			t.Errorf("%s /healthz: missing %s header", method, requestIDHeader)
-		}
-		if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
-			t.Errorf("%s /healthz: missing security headers", method)
-		}
+		assertCommonHeaders(t, rec.Header())
 	}
 	rec := serve(h, http.MethodGet, "/healthz")
 	if got := rec.Body.String(); got != "{\"status\":\"ok\"}\n" {
@@ -76,6 +98,7 @@ func TestRouter_NotFound(t *testing.T) {
 	if p.RequestID == "" || p.RequestID != rec.Header().Get(requestIDHeader) {
 		t.Errorf("requestId = %q, header = %q", p.RequestID, rec.Header().Get(requestIDHeader))
 	}
+	assertCommonHeaders(t, rec.Header())
 }
 
 func TestRouter_MethodNotAllowed(t *testing.T) {
@@ -91,6 +114,7 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 	if p := decodeProblemBody(t, rec); p.Code != CodeMethodNotAllowed {
 		t.Errorf("code = %q", p.Code)
 	}
+	assertCommonHeaders(t, rec.Header())
 }
 
 func TestRouter_DefaultLogger(t *testing.T) {
@@ -125,7 +149,10 @@ func TestReadiness(t *testing.T) {
 				if p := decodeProblemBody(t, rec); p.Code != CodeNotReady {
 					t.Errorf("code = %q, want %q", p.Code, CodeNotReady)
 				}
+			} else if got := rec.Body.String(); got != "{\"status\":\"ok\"}\n" {
+				t.Errorf("body = %q, want {\"status\":\"ok\"}", got)
 			}
+			assertCommonHeaders(t, rec.Header())
 		})
 	}
 }
@@ -134,7 +161,7 @@ func TestWriteJSON_EncodingFailureBecomesProblem(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
 	h := requestID(slog.New(slog.NewTextHandler(&logs, nil)))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, r, http.StatusOK, map[string]float64{"value": math.NaN()})
+		writeJSON(w, r, map[string]float64{"value": math.NaN()})
 	}))
 	rec := serve(h, http.MethodGet, "/x")
 

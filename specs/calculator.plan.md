@@ -133,6 +133,7 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | D-5 | Body limit and handler timeout | Environment variables `HTTP_MAX_BODY_BYTES=4096`, `HTTP_REQUEST_TIMEOUT=5s`, documented in the README config table (user, 2026-09-18) | Config tests cover both; README lists them with the other limits |
 | D-6 | Docker | User installs Docker before Phase 6; compose smoke test runs locally then (user, 2026-09-18) | Phase 6 blocks on `docker compose` availability |
 | D-7 | `docs/prompts.md` | The `/spec` prompt is pasted by the user in Phase 7; `/implement` invocation recorded now (user, 2026-09-18) | Phase 7 asks for the text |
+| D-9 | Fractional exponent implementation | In-package fixed-point `exp(f·ln x)` on `math/big` (88 places) replaces `PowWithPrecision`, which has a verified data race and a `float64` seed; spec §5 and decision 35 amended (user, 2026-09-18) | A-14's fractional step changes; number-representation ADR documents the race |
 | D-8 | Branch | `master` renamed to `main`; CI triggers on `main` and pull requests (user, 2026-09-18) | Matches the template workflow |
 
 | ID | Assumption | Why it is safe to assume |
@@ -166,6 +167,9 @@ the slices land (Go: `TestX/case`; Vitest: `file › name`; Playwright: `spec �
 | A-28 | ESLint is pinned to major 9 (`eslint@^9`, `@eslint/js@^9`) because `eslint-plugin-jsx-a11y` 6.10 declares ESLint 3–9 support only; every other plugin supports 9 | Cleanest resolution of a peer conflict the template created; dev tooling only |
 | A-29 | Escape clears only while focus is in the expression input (the §7 keyboard list describes input shortcuts); keypad and history buttons are reached by Tab and act on Enter/Space | Focus returns to the input after every tap and commit, so Escape is available in the normal flow |
 | A-30 | While a new live request is pending, the previous status text stays visible until the next response, symmetrical with "the previous result stays visible"; "Calculating…" after 300 ms replaces the result, the status text and "Evaluated as …" | §7 defines the status region as replacing the result; edits clear alerts only (FR-13.6) |
+| A-31 | A parse error on a `)` that normalization appended (`(sqrt`) is reported as "unexpected end of input" with Position = input length, since no real character exists to quote | Consistent with A-7 |
+| A-32 | D-2 applies to the last token of the trimmed input even inside an open group: `(2.` → expression "(2)" = 2, `2 .` → "2"; two dots anywhere stay INVALID_NUMBER | Literal reading of D-2 and the "single trailing `.`" rule |
+| A-33 | Operator and function tables panic on an invalid or duplicate registration at construction time (like `http.ServeMux` duplicate patterns); this is invariant checking, not control flow | Tables are built once in `New()` and covered by tests |
 | A-27 | Ports: API 8080, Vite 5173, containers web 3000; Playwright uses 18080/14173 | Clarification guide defaults |
 
 ## 3. Architecture
@@ -285,12 +289,12 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 - [x] T-4 `make fmt lint typecheck test build` green; `make dev` smoke via Vite proxy; commit `chore: scaffold backend and frontend`
 
 ### Phase 4: Backend
-- [ ] T-5 (FR-1.4, FR-6, FR-7) Tokens, lexer, normalizer, validation errors and messages, depth check
-- [ ] T-6 (FR-1..5, NFR-8) AST, operator/function tables, table-driven parser
-- [ ] T-7 (FR-1..5, FR-8) Number helpers (rounding, cap, division, sqrt, power), evaluator with ctx, canonical output, fuzz, benchmark
-- [ ] T-8 (API-1..8, FR-7.9, FR-7.11, FR-8.8) `evaluate` handler, DTOs, error mapping, timeout → 503, OpenAPI
-- [ ] T-9 (API-3, API-9, API-10, NFR-6, FR-15) Middleware deltas: request-ID rule, security headers, CORS rules, access-log fields, `*` rejection; readiness flag and shutdown ordering
-- [ ] T-10 Wiring in `app`, black-box tests for the contract examples; `go vet`, lint, `-race`, coverage; commit `feat(api): …`
+- [x] T-5 (FR-1.4, FR-6, FR-7) Tokens, lexer, normalizer, validation errors and messages, depth check
+- [x] T-6 (FR-1..5, NFR-8) AST, operator/function tables, table-driven parser
+- [x] T-7 (FR-1..5, FR-8) Number helpers (rounding, cap, division, sqrt, power), evaluator with ctx, canonical output, fuzz, benchmark
+- [x] T-8 (API-1..8, FR-7.9, FR-7.11, FR-8.8) `evaluate` handler, DTOs, error mapping, timeout → 503, OpenAPI
+- [x] T-9 (API-3, API-9, API-10, NFR-6, FR-15) Middleware deltas: request-ID rule, security headers, CORS rules, access-log fields, `*` rejection; readiness flag and shutdown ordering
+- [x] T-10 Wiring in `app`, black-box tests for the contract examples; `go vet`, lint, `-race`, coverage; commit `feat(api): …`
 
 ### Phase 5: Frontend
 - [x] T-11 (FR-9, FR-13) `src/api/evaluate.ts` + MSW handler; `config.ts` base URL
@@ -333,3 +337,5 @@ Domain constants (README "Limits"): expression ≤ 1,024 code points, depth ≤ 
 
 - 2026-09-18: Phase 0–1 complete (toolchain, guardrail edits, clarifications D-1..D-8).
 - 2026-09-18: Phase 2 complete, commit `0a2322c` (`docs(plan): add calculator implementation plan`).
+- 2026-09-18: Phase 3 complete, commit `7c8ec42` (`chore: scaffold backend and frontend`).
+- 2026-09-18: Phase 5 complete, commit `831249c` (`feat(web): add calculator feature with live preview, keypad and history`).

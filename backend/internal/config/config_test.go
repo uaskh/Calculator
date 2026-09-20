@@ -19,20 +19,29 @@ func TestLoad_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.HTTP.Addr != ":8080" {
-		t.Errorf("Addr = %q, want :8080", cfg.HTTP.Addr)
+	tests := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"HTTP_ADDR", cfg.HTTP.Addr, ":8080"},
+		{"HTTP_READ_HEADER_TIMEOUT", cfg.HTTP.ReadHeaderTimeout, 5 * time.Second},
+		{"HTTP_READ_TIMEOUT", cfg.HTTP.ReadTimeout, 10 * time.Second},
+		{"HTTP_WRITE_TIMEOUT", cfg.HTTP.WriteTimeout, 15 * time.Second},
+		{"HTTP_IDLE_TIMEOUT", cfg.HTTP.IdleTimeout, 60 * time.Second},
+		{"HTTP_SHUTDOWN_TIMEOUT", cfg.HTTP.ShutdownTimeout, 10 * time.Second},
+		{"HTTP_REQUEST_TIMEOUT", cfg.HTTP.RequestTimeout, 5 * time.Second},
+		{"HTTP_MAX_BODY_BYTES", cfg.HTTP.MaxBodyBytes, int64(4096)},
+		{"LOG_LEVEL", cfg.LogLevel, slog.LevelInfo},
+		{"LOG_FORMAT", cfg.LogFormat, "json"},
 	}
-	if cfg.HTTP.MaxBodyBytes != 4096 {
-		t.Errorf("MaxBodyBytes = %d, want %d", cfg.HTTP.MaxBodyBytes, 4096)
-	}
-	if cfg.HTTP.RequestTimeout != 5*time.Second || cfg.HTTP.ShutdownTimeout != 10*time.Second {
-		t.Errorf("timeouts = request %s / shutdown %s, want 5s / 10s", cfg.HTTP.RequestTimeout, cfg.HTTP.ShutdownTimeout)
-	}
-	if cfg.LogLevel != slog.LevelInfo || cfg.LogFormat != "json" {
-		t.Errorf("logging = %v/%s, want INFO/json", cfg.LogLevel, cfg.LogFormat)
+	for _, tc := range tests {
+		if tc.got != tc.want {
+			t.Errorf("default %s = %v, want %v", tc.name, tc.got, tc.want)
+		}
 	}
 	if cfg.AllowedOrigins != nil {
-		t.Errorf("AllowedOrigins = %v, want none", cfg.AllowedOrigins)
+		t.Errorf("AllowedOrigins = %v, want none (CORS off)", cfg.AllowedOrigins)
 	}
 }
 
@@ -40,25 +49,40 @@ func TestLoad_Overrides(t *testing.T) {
 	t.Parallel()
 
 	cfg, err := Load(env(map[string]string{
-		"HTTP_ADDR":            "127.0.0.1:9000",
-		"HTTP_REQUEST_TIMEOUT": "2s",
-		"HTTP_MAX_BODY_BYTES":  "2048",
-		"LOG_LEVEL":            "debug",
-		"LOG_FORMAT":           "TEXT",
-		"CORS_ALLOWED_ORIGINS": " http://localhost:5173 , ,https://app.example.com",
+		"HTTP_ADDR":                "127.0.0.1:9000",
+		"HTTP_READ_HEADER_TIMEOUT": "1s",
+		"HTTP_READ_TIMEOUT":        "3s",
+		"HTTP_WRITE_TIMEOUT":       "4s",
+		"HTTP_IDLE_TIMEOUT":        "30s",
+		"HTTP_SHUTDOWN_TIMEOUT":    "2s",
+		"HTTP_REQUEST_TIMEOUT":     "2s",
+		"HTTP_MAX_BODY_BYTES":      "2048",
+		"LOG_LEVEL":                "debug",
+		"LOG_FORMAT":               "TEXT",
+		"CORS_ALLOWED_ORIGINS":     " http://localhost:5173 , ,https://app.example.com",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.HTTP.Addr != "127.0.0.1:9000" || cfg.HTTP.RequestTimeout != 2*time.Second || cfg.HTTP.MaxBodyBytes != 2048 {
-		t.Errorf("HTTP = %+v", cfg.HTTP)
+	want := HTTP{
+		Addr:              "127.0.0.1:9000",
+		ReadHeaderTimeout: time.Second,
+		ReadTimeout:       3 * time.Second,
+		WriteTimeout:      4 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		ShutdownTimeout:   2 * time.Second,
+		RequestTimeout:    2 * time.Second,
+		MaxBodyBytes:      2048,
+	}
+	if cfg.HTTP != want {
+		t.Errorf("HTTP = %+v, want %+v", cfg.HTTP, want)
 	}
 	if cfg.LogLevel != slog.LevelDebug || cfg.LogFormat != "text" {
 		t.Errorf("logging = %v/%s, want DEBUG/text", cfg.LogLevel, cfg.LogFormat)
 	}
-	want := []string{"http://localhost:5173", "https://app.example.com"}
-	if !slices.Equal(cfg.AllowedOrigins, want) {
-		t.Errorf("AllowedOrigins = %v, want %v", cfg.AllowedOrigins, want)
+	wantOrigins := []string{"http://localhost:5173", "https://app.example.com"}
+	if !slices.Equal(cfg.AllowedOrigins, wantOrigins) {
+		t.Errorf("AllowedOrigins = %v, want %v", cfg.AllowedOrigins, wantOrigins)
 	}
 }
 
@@ -70,12 +94,23 @@ func TestLoad_Invalid(t *testing.T) {
 		vars    map[string]string
 		wantErr string
 	}{
-		{"bad duration", map[string]string{"HTTP_READ_TIMEOUT": "soon"}, "HTTP_READ_TIMEOUT"},
-		{"negative duration", map[string]string{"HTTP_IDLE_TIMEOUT": "-1s"}, "HTTP_IDLE_TIMEOUT"},
+		{"unparsable read header timeout", map[string]string{"HTTP_READ_HEADER_TIMEOUT": "soon"}, "HTTP_READ_HEADER_TIMEOUT"},
+		{"zero read header timeout", map[string]string{"HTTP_READ_HEADER_TIMEOUT": "0"}, "HTTP_READ_HEADER_TIMEOUT"},
+		{"unparsable read timeout", map[string]string{"HTTP_READ_TIMEOUT": "soon"}, "HTTP_READ_TIMEOUT"},
+		{"unparsable write timeout", map[string]string{"HTTP_WRITE_TIMEOUT": "later"}, "HTTP_WRITE_TIMEOUT"},
+		{"negative idle timeout", map[string]string{"HTTP_IDLE_TIMEOUT": "-1s"}, "HTTP_IDLE_TIMEOUT"},
+		{"unparsable shutdown timeout", map[string]string{"HTTP_SHUTDOWN_TIMEOUT": "10"}, "HTTP_SHUTDOWN_TIMEOUT"},
+		{"zero shutdown timeout", map[string]string{"HTTP_SHUTDOWN_TIMEOUT": "0s"}, "HTTP_SHUTDOWN_TIMEOUT"},
+		{"unparsable request timeout", map[string]string{"HTTP_REQUEST_TIMEOUT": "five"}, "HTTP_REQUEST_TIMEOUT"},
+		{"request timeout equal to write timeout", map[string]string{"HTTP_REQUEST_TIMEOUT": "15s"}, "HTTP_REQUEST_TIMEOUT"},
+		{"request timeout longer than write timeout", map[string]string{"HTTP_REQUEST_TIMEOUT": "30s"}, "HTTP_REQUEST_TIMEOUT"},
 		{"zero body limit", map[string]string{"HTTP_MAX_BODY_BYTES": "0"}, "HTTP_MAX_BODY_BYTES"},
-		{"bad log level", map[string]string{"LOG_LEVEL": "loud"}, "LOG_LEVEL"},
-		{"bad log format", map[string]string{"LOG_FORMAT": "xml"}, "LOG_FORMAT"},
-		{"request timeout too long", map[string]string{"HTTP_REQUEST_TIMEOUT": "30s"}, "HTTP_REQUEST_TIMEOUT"},
+		{"negative body limit", map[string]string{"HTTP_MAX_BODY_BYTES": "-1"}, "HTTP_MAX_BODY_BYTES"},
+		{"non-numeric body limit", map[string]string{"HTTP_MAX_BODY_BYTES": "4k"}, "HTTP_MAX_BODY_BYTES"},
+		{"unknown log level", map[string]string{"LOG_LEVEL": "loud"}, "LOG_LEVEL"},
+		{"unknown log format", map[string]string{"LOG_FORMAT": "xml"}, "LOG_FORMAT"},
+		{"wildcard origin", map[string]string{"CORS_ALLOWED_ORIGINS": "*"}, "CORS_ALLOWED_ORIGINS"},
+		{"wildcard among origins", map[string]string{"CORS_ALLOWED_ORIGINS": "http://localhost:5173, *"}, "CORS_ALLOWED_ORIGINS"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,14 +123,26 @@ func TestLoad_Invalid(t *testing.T) {
 	}
 }
 
+func TestLoad_RequestTimeoutMayShrinkWithWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Load(env(map[string]string{"HTTP_WRITE_TIMEOUT": "3s", "HTTP_REQUEST_TIMEOUT": "2s"}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HTTP.RequestTimeout != 2*time.Second || cfg.HTTP.WriteTimeout != 3*time.Second {
+		t.Errorf("timeouts = request %s / write %s, want 2s / 3s", cfg.HTTP.RequestTimeout, cfg.HTTP.WriteTimeout)
+	}
+}
+
 func TestLoad_ReportsAllProblems(t *testing.T) {
 	t.Parallel()
 
-	_, err := Load(env(map[string]string{"LOG_LEVEL": "loud", "LOG_FORMAT": "xml"}))
+	_, err := Load(env(map[string]string{"LOG_LEVEL": "loud", "LOG_FORMAT": "xml", "CORS_ALLOWED_ORIGINS": "*"}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error")
 	}
-	for _, key := range []string{"LOG_LEVEL", "LOG_FORMAT"} {
+	for _, key := range []string{"LOG_LEVEL", "LOG_FORMAT", "CORS_ALLOWED_ORIGINS"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %q does not mention %s", err, key)
 		}

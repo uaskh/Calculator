@@ -7,15 +7,21 @@
 # packages app, config, httpapi, server and storage).
 # Frontend thresholds are enforced by Vitest itself (vitest.config.ts).
 #
-# Usage: scripts/coverage-report.sh [coverage-dir] [backend-min-percent] [domain-min-percent] > docs/coverage.md
+# When <dir>/backend/bench.txt (go test -bench output) exists, a Benchmarks section lists
+# every case and the script exits 1 if any case exceeds <bench-max-ms> milliseconds per
+# operation (the calculator spec requires < 5 ms per worst case).
+#
+# Usage: scripts/coverage-report.sh [coverage-dir] [backend-min-percent] [domain-min-percent] [bench-max-ms] > docs/coverage.md
 set -euo pipefail
 
 dir="${1:-coverage}"
 min="${2:-80}"
 domain_min="${3:-90}"
+bench_max_ms="${4:-5}"
 infra_re='/internal/(app|config|httpapi|server|storage)(/|$)'
 profile="$dir/backend/coverage.out"
 summary="$dir/frontend/coverage-summary.json"
+bench="$dir/backend/bench.txt"
 status=0
 
 echo "# Test coverage"
@@ -106,6 +112,36 @@ NODE
   echo "Thresholds are enforced in \`frontend/vitest.config.ts\`."
 else
   echo "_No frontend summary at \`$summary\`._"
+fi
+
+if [[ -f "$bench" ]]; then
+  echo
+  echo "## Benchmarks (Go, evaluator worst cases)"
+  echo
+  echo "Measured by \`go test -bench=BenchmarkEvaluate\` on this machine; CI runs the same benchmark."
+  echo
+  echo "| Case | ns/op | ms/op |"
+  echo "|---|---:|---:|"
+  slow_file="$(mktemp)"
+  awk -v maxms="$bench_max_ms" -v slowfile="$slow_file" '
+    $1 ~ /^BenchmarkEvaluate\// && $(NF) == "ns/op" {
+      name = $1; sub(/^BenchmarkEvaluate\//, "", name); sub(/-[0-9]+$/, "", name)
+      ns = $(NF - 1); ms = ns / 1000000
+      note = ""
+      if (ms >= maxms + 0) { note = " (over " maxms " ms)"; slow = slow (slow == "" ? "" : ", ") name }
+      printf "| `%s` | %d | %.3f%s |\n", name, ns, ms, note
+    }
+    END { printf "%s", slow > slowfile }' "$bench"
+  slow_cases="$(cat "$slow_file")"
+  rm -f "$slow_file"
+  echo
+  if [[ -n "$slow_cases" ]]; then
+    echo "**Benchmark cases over the ${bench_max_ms} ms limit:** ${slow_cases}."
+    echo "benchmark cases over the ${bench_max_ms} ms limit: ${slow_cases}" >&2
+    status=1
+  else
+    echo "**Benchmark limit: ${bench_max_ms} ms per case (met).**"
+  fi
 fi
 
 exit "$status"
